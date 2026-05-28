@@ -40,9 +40,7 @@ def parse_work_scope(
 
     deps_sec = section_by_title(sections, "Dependencies")
     dep_body = deps_sec.body if deps_sec is not None else ""
-    dependencies = tuple(
-        parse_dependencies_section(dep_body, successor=name)
-    )
+    dependencies = tuple(parse_dependencies_section(dep_body, successor=name))
 
     base = WorkScope(
         name=name,

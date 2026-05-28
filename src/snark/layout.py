@@ -174,8 +174,7 @@ def promote_initiative(root: Path, raw_name: str) -> Path:
         raise SnarkLayoutError(msg)
     content = src.read_text(encoding="utf-8")
     has_criteria = (
-        "### Criteria for Success" in content
-        or "## Criteria for Success" in content
+        "### Criteria for Success" in content or "## Criteria for Success" in content
     )
     if not has_criteria:
         content = content.rstrip() + "\n\n### Criteria for Success\n\nTBD.\n"

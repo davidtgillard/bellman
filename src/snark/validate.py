@@ -142,8 +142,7 @@ def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
                     )
                 )
         wp_edges = [
-            e
-            for _, e in _collect_wp_edges(project.work_packages, project.name)
+            e for _, e in _collect_wp_edges(project.work_packages, project.name)
         ]
         normalized = [
             PrecedenceEdge(

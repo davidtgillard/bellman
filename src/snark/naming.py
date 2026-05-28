@@ -12,10 +12,7 @@ _SLUG_CLEAN_RE = re.compile(r"[^a-z0-9]+")
 def validate_kebab(name: str) -> None:
     """Raise ValueError if ``name`` is not lowercase kebab-case."""
     if not KEBAB_CASE_RE.fullmatch(name):
-        msg = (
-            f"name {name!r} must be lowercase kebab-case "
-            "(e.g. billing-redesign)"
-        )
+        msg = f"name {name!r} must be lowercase kebab-case (e.g. billing-redesign)"
         raise ValueError(msg)
 
 

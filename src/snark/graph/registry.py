@@ -42,13 +42,9 @@ def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
     for rel in RelationType:
         for hard in Hardness:
             lt = f"precedes_{rel.value}_{hardness_suffix(hard)}"
-            steps.append(
-                repo.register_link_type(lt, "work_package", "work_package")
-            )
+            steps.append(repo.register_link_type(lt, "work_package", "work_package"))
             scope_lt = f"{lt}_scope"
-            steps.append(
-                repo.register_link_type(scope_lt, "work_scope", "work_scope")
-            )
+            steps.append(repo.register_link_type(scope_lt, "work_scope", "work_scope"))
 
     for step in steps:
         if isinstance(step, Err):
