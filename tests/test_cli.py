@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import semver
 from typer.testing import CliRunner
 
 from snark.cli import app
 
 runner = CliRunner()
+
+
+def test_version() -> None:
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0
+    assert semver.Version.parse(result.stdout.strip())
 
 
 def test_init_and_create(tmp_path: Path) -> None:

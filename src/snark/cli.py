@@ -9,6 +9,7 @@ import typer
 from pyfits.result import Err
 
 from snark import layout
+from snark._version import version_string
 from snark.errors import SnarkLayoutError
 from snark.graph.sync import libfits_available, sync_roadmap
 from snark.roadmap import load
@@ -192,6 +193,12 @@ def validate(
             typer.echo(f"Graph sync failed: {sync_result.err_value}", err=True)
             raise typer.Exit(code=1)
         typer.echo("Graph sync and libfits validation passed.")
+
+
+@app.command()
+def version() -> None:
+    """Print the installed snark version."""
+    typer.echo(version_string())
 
 
 def main() -> None:

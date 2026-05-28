@@ -8,6 +8,7 @@ license = { text = "AGPL-3.0-or-later" }
 dependencies = [
     "pyfits",
     "result>=0.17.0",
+    "semver>=3.0.4",
     "typer>=0.15.0",
 ]
 

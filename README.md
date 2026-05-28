@@ -2,6 +2,17 @@
 
 Markdown-first roadmap planning built on [pyfits](https://github.com/davidtgillard/pyfits/).
 
+## Install
+
+Install the latest development wheel from the rolling [`dev` release](https://github.com/davidtgillard/snark/releases/tag/dev):
+
+```toml
+[tool.uv.sources]
+snark = { url = "https://github.com/davidtgillard/snark/releases/download/dev/snark-0.1.0-py3-none-any.whl" }
+```
+
+The wheel filename changes when the version in `pyproject.toml` is bumped.
+
 ## About
 
 Snark defines a roadmap as initiatives, projects, work packages, milestones, and goals. Human-edited markdown is the source of truth; a pyfits graph is derived for validation and future tooling.
@@ -31,6 +42,7 @@ snark create milestone ga-release
 snark create goal reduce-churn
 snark promote billing-redesign   # after creating as initiative
 snark validate .
+snark version
 snark delete my-goal
 ```
 

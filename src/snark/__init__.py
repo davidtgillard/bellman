@@ -1,10 +1,7 @@
 """Snark: markdown-first roadmap planning on pyfits."""
 
-from importlib.metadata import PackageNotFoundError, version
+from snark._version import version_string
 
-try:
-    __version__ = version("snark")
-except PackageNotFoundError:
-    __version__ = "0.0.0+unknown"
+__version__ = version_string()
 
 __all__ = ["__version__"]
