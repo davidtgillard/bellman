@@ -1,0 +1,65 @@
+[project]
+name = "snark"
+version = "0.1.0"
+description = "Markdown-first roadmap planning built on pyfits"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "AGPL-3.0-or-later" }
+dependencies = [
+    "pyfits",
+    "result>=0.17.0",
+    "typer>=0.15.0",
+]
+
+[project.scripts]
+snark = "snark.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.11.15,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+pyfits = [
+    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp312-cp312-manylinux_2_36_x86_64.whl", marker = "python_version == '3.12'" },
+    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp313-cp313-manylinux_2_36_x86_64.whl", marker = "python_version == '3.13'" },
+    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl", marker = "python_version >= '3.14'" },
+]
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.29.0",
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.15.13",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "N", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires libfits (pyfits native library)",
+]
+addopts = [
+    "--cov=snark",
+    "--cov-report=term-missing",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["snark"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+extraPaths = ["src"]
