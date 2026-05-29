@@ -4,6 +4,8 @@
 import os
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
 root = Path(SPECPATH).resolve().parent
 src = root / "src"
@@ -37,10 +39,14 @@ a = Analysis(
         "semver",
         "typer",
         "click",
+        *collect_submodules("shellingham"),
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[str(root / "packaging" / "rthook_libfits.py")],
+    runtime_hooks=[
+        str(root / "packaging" / "rthook_libfits.py"),
+        str(root / "packaging" / "rthook_shellingham.py"),
+    ],
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
