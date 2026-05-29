@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal, overload
 
-from snark.model import Initiative, Project, WorkScope
+from snark.model import Initiative, Project, WorkPackage, WorkScope
 from snark.naming import normalize_entity_name
 from snark.parse._sections import section_by_title, split_sections
 from snark.parse.dependencies import parse_dependencies_section
@@ -17,6 +18,24 @@ def _required_section(sections: list, title: str, path: str) -> str:
         msg = f"missing required section {title!r} in {path}"
         raise ValueError(msg)
     return sec.body
+
+
+@overload
+def parse_work_scope(
+    path: Path,
+    *,
+    is_project: Literal[False],
+    work_packages_path: Path | None = None,
+) -> Initiative: ...
+
+
+@overload
+def parse_work_scope(
+    path: Path,
+    *,
+    is_project: Literal[True],
+    work_packages_path: Path | None = None,
+) -> Project: ...
 
 
 def parse_work_scope(
@@ -80,7 +99,7 @@ def parse_work_scope(
         if not criteria:
             criteria = parts[1].strip() if len(parts) > 1 else ""
 
-    packages = ()
+    packages: tuple[WorkPackage, ...] = ()
     if work_packages_path is not None and work_packages_path.is_file():
         packages = tuple(parse_work_packages(work_packages_path, project_name=name))
 

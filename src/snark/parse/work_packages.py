@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from snark.model import ThreePointEstimate, WorkPackage
+from snark.model import PrecedenceEdge, ThreePointEstimate, WorkPackage
 from snark.naming import slugify, validate_kebab
 from snark.parse._sections import Section, split_sections, subsections
 from snark.parse.dependencies import parse_dependencies_section
@@ -61,7 +61,7 @@ def _parse_wp_tree(
     # Description: text before first ### subsection
     description = section.body
     estimate: ThreePointEstimate | None = None
-    dep_edges = ()
+    dep_edges: tuple[PrecedenceEdge, ...] = ()
     children: list[WorkPackage] = []
 
     for sub in child_headers:

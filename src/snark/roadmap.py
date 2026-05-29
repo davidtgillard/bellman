@@ -41,9 +41,7 @@ def load(root: Path) -> Roadmap:
             if path.name.endswith(layout.ARCHIVED_SUFFIX):
                 archived.append(_parse_archived_initiative(path))
                 continue
-            initiatives.append(
-                parse_work_scope(path, is_project=False)  # type: ignore[arg-type]
-            )
+            initiatives.append(parse_work_scope(path, is_project=False))
 
     proj_dir = root / layout.PROJECTS_DIR
     if proj_dir.is_dir():

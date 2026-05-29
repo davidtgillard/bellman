@@ -1,0 +1,58 @@
+---
+description: Require Google-style docstrings on all public Python APIs
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Google-style public API documentation
+
+Every **public** symbol in `src/**/*.py` must have a complete Google-style
+docstring. Public means:
+
+- Names listed in `__all__`
+- Module-level functions, classes, constants, and type aliases without a
+  leading underscore
+- Public methods on public classes (no leading underscore)
+
+Private helpers (`_name`) need only a brief summary when non-obvious.
+
+## Required sections
+
+| Symbol kind | Required sections |
+|-------------|-------------------|
+| Function / method returning `Result` | Summary, `Args`, `Returns` describing both `Ok(...)` and `Err(...)` payloads; `Raises` only for programming-error exceptions |
+| Function returning `None` | Summary, `Args`, `Raises` |
+| Class / dataclass / enum | Summary, `Attributes` for fields and enum members |
+| Module-level constant | Document in the module docstring under a `Constants:` heading, or attach a trailing string assignment doc (see below) |
+| Type alias | Trailing string doc on the line after the alias |
+
+## Format
+
+```python
+def fetch_node(node_id: str, *, strict: bool = False) -> Node:
+    """Fetch a node from the repository graph.
+
+    Args:
+        node_id: Graph object identifier.
+        strict: When True, reject partially populated nodes.
+
+    Returns:
+        Parsed node model.
+
+    Raises:
+        KeyError: When ``node_id`` is not present.
+        FitsError: When libfits reports an operation failure.
+    """
+```
+
+```python
+PROTOCOL_VERSION = 1
+"""JSON protocol version sent to libfits for supported operations."""
+```
+
+## Checklist before finishing Python changes
+
+- [ ] Every new or changed public symbol has Args / Returns / Raises as applicable
+- [ ] Dataclass and enum fields are listed under `Attributes`
+- [ ] Re-exported public names inherit docs from their defining module
+- [ ] Exceptions raised for programming mistakes are documented under **Raises**; operational failures are documented under **Returns** as `Err(...)` payloads

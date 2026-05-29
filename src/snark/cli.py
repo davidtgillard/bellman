@@ -13,6 +13,7 @@ from snark._version import version_string
 from snark.errors import SnarkLayoutError
 from snark.graph.sync import libfits_available, sync_roadmap
 from snark.roadmap import load
+from snark.update import maybe_notify_update, run_update_command
 from snark.validate import validate_roadmap
 
 app = typer.Typer(
@@ -20,6 +21,12 @@ app = typer.Typer(
     help="Markdown-first roadmap planning on pyfits.",
     no_args_is_help=True,
 )
+
+
+@app.callback()
+def _cli_entry(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand != "update":
+        maybe_notify_update(ctx)
 
 
 def _root(path: Path | None) -> Path:
@@ -193,6 +200,20 @@ def validate(
             typer.echo(f"Graph sync failed: {sync_result.err_value}", err=True)
             raise typer.Exit(code=1)
         typer.echo("Graph sync and libfits validation passed.")
+
+
+@app.command()
+def update(
+    check_only: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Check for updates without installing (exit 1 if available)",
+        ),
+    ] = False,
+) -> None:
+    """Check for and install a newer snark binary from the dev release."""
+    run_update_command(check_only=check_only)
 
 
 @app.command()

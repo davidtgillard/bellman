@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build wheel
+    name: Build binary
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,18 +24,34 @@ jobs:
         run: uv python install
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --all-groups
 
-      - name: Build wheel
+      - name: Write embedded build version
+        run: uv run python packaging/write_build_version.py
+
+      - name: Resolve libfits for bundling
         run: |
-          mkdir -p wheelhouse
-          uv build --wheel --out-dir wheelhouse
+          set -euo pipefail
+          libfits="$(uv run python packaging/resolve_libfits.py)"
+          echo "LIBFITS_PATH=${libfits}" >> "${GITHUB_ENV}"
 
-      - name: Upload wheel artifacts
+      - name: Build PyInstaller binary
+        run: uv run pyinstaller packaging/snark.spec --noconfirm
+
+      - name: Package release artifacts
+        run: |
+          set -euo pipefail
+          version="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          mkdir -p dist/release
+          cp dist/snark "dist/release/snark-${version}-linux-x86_64"
+          chmod +x "dist/release/snark-${version}-linux-x86_64"
+          (cd dist/release && sha256sum "snark-${version}-linux-x86_64" > "snark-${version}-linux-x86_64.sha256")
+
+      - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: snark-wheelhouse
-          path: wheelhouse/*.whl
+          name: snark-binary
+          path: dist/release/*
 
   publish-dev-release:
     name: Publish dev release
@@ -44,11 +60,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download wheel artifacts
+      - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
-          name: snark-wheelhouse
-          path: wheelhouse
+          name: snark-binary
+          path: release
 
       - name: Ensure dev release exists
         env:
@@ -57,8 +73,8 @@ jobs:
           gh release view dev --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
           gh release create dev \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Development wheels" \
-            --notes "Rolling development wheels for snark." \
+            --title "Development binaries" \
+            --notes "Rolling development PyInstaller binaries for snark (linux-x86_64)." \
             --prerelease
 
       - name: Remove existing dev assets
@@ -72,7 +88,7 @@ jobs:
             gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
           done
 
-      - name: Upload fresh dev wheels
+      - name: Upload fresh dev binaries
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload dev wheelhouse/*.whl --repo "$GITHUB_REPOSITORY"
+        run: gh release upload dev release/* --repo "$GITHUB_REPOSITORY"

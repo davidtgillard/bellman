@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from importlib.metadata import PackageNotFoundError, version
 
 import semver
@@ -9,7 +10,23 @@ import semver
 _FALLBACK_VERSION = "0.0.0+unknown"
 
 
+def _frozen_version_string() -> str | None:
+    if not getattr(sys, "frozen", False):
+        return None
+    try:
+        from snark._build_version import VERSION
+
+        if VERSION:
+            return VERSION
+    except ImportError:
+        pass
+    return None
+
+
 def _load_version_string() -> str:
+    frozen = _frozen_version_string()
+    if frozen is not None:
+        return frozen
     try:
         return version("snark")
     except PackageNotFoundError:
