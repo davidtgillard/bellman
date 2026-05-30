@@ -30,3 +30,5 @@ def test_sync_example_roadmap(tmp_path: Path) -> None:
     root = tmp_path / "roadmap"
     result = sync_roadmap(root)
     assert isinstance(result, Ok)
+    repeat = sync_roadmap(root)
+    assert isinstance(repeat, Ok)

@@ -54,7 +54,7 @@ run_check() {
 # Checks — add, remove, or reorder entries below.
 # Each line is: run_check "display name" command [args...]
 # ---------------------------------------------------------------------------
-run_check "ruff format" uv run ruff format check .
+run_check "ruff format" uv run ruff format --check .
 run_check "ruff lint" uv run ruff check .
 run_check "basedpyright" uv run basedpyright
 run_check "mypy" uv run mypy .

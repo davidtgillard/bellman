@@ -6,6 +6,7 @@ from pyfits import Repo
 from pyfits.errors import FitsError
 from pyfits.result import Err, Ok, Result
 
+from snark.graph.fits_errors import ignore_if_already_exists
 from snark.model import Hardness, RelationType
 
 
@@ -47,6 +48,7 @@ def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
             steps.append(repo.register_link_type(scope_lt, "work_scope", "work_scope"))
 
     for step in steps:
-        if isinstance(step, Err):
-            return step
+        normalized = ignore_if_already_exists(step)
+        if isinstance(normalized, Err):
+            return normalized
     return Ok(None)

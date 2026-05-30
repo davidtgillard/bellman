@@ -12,6 +12,7 @@ from pyfits.result import Err, Ok, Result
 
 from snark import layout
 from snark.graph import link_naming
+from snark.graph.fits_errors import ignore_duplicate_instance, ignore_duplicate_link
 from snark.graph.registry import bootstrap_registry
 from snark.model import Initiative, Project, Roadmap, WorkPackage
 from snark.roadmap import load
@@ -63,7 +64,7 @@ def _ensure_node(
             nodes=[*graph.nodes],
             edges=graph.edges,
         )
-    return result
+    return ignore_duplicate_instance(result, node_id=node_id)
 
 
 def _ensure_link(
@@ -82,7 +83,10 @@ def _ensure_link(
             and edge.to_id == out_id
         ):
             return Ok(edge.id or Id(target_id.value))
-    return repo.new_link(link_type, in_id, out_id, target_id=target_id)
+    return ignore_duplicate_link(
+        repo.new_link(link_type, in_id, out_id, target_id=target_id),
+        link_id=Id(target_id.value),
+    )
 
 
 def _resolve_wp_ref(project_name: str, ref: str) -> Id:

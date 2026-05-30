@@ -193,9 +193,7 @@ def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
 
     for goal in roadmap.goals:
         if not goal.title.strip():
-            errors.append(
-                SnarkError(goal.path, "goal missing top-level header")
-            )
+            errors.append(SnarkError(goal.path, "goal missing top-level header"))
         else:
             try:
                 title_matches = slugify(goal.title) == goal.name
@@ -209,9 +207,7 @@ def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
                     )
                 )
         if not goal.description.strip():
-            errors.append(
-                SnarkError(goal.path, "goal missing content beneath header")
-            )
+            errors.append(SnarkError(goal.path, "goal missing content beneath header"))
 
     return errors
 
