@@ -8,7 +8,7 @@ from snark.graph.history import (
     TombstoneRecord,
     load_graph_history,
 )
-from snark.graph.sync import libfits_available, sync_roadmap
+from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 
 __all__ = [
     "GraphHistory",
@@ -16,6 +16,7 @@ __all__ = [
     "InstanceRename",
     "SnarkHistoryError",
     "TombstoneRecord",
+    "init_pyfits_repo",
     "libfits_available",
     "load_graph_history",
     "sync_roadmap",

@@ -10,6 +10,7 @@ import click
 import typer
 
 from snark import layout
+from snark.errors import SnarkLayoutError
 from snark.plugin.args import build_parser
 from snark.plugin.arguments import PluginArguments
 from snark.plugin.context import SnarkContext
@@ -19,7 +20,11 @@ from snark.plugin.textio import TextIO
 
 
 def _root(path: Path | None) -> Path:
-    return layout.roadmap_root(path)
+    try:
+        return layout.discover_roadmap_root(path)
+    except SnarkLayoutError as exc:
+        typer.echo(exc.message, err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def _plugin_list(root: Path, io: TextIO) -> None:

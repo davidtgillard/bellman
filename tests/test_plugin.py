@@ -98,6 +98,7 @@ def test_plugin_list_and_run(tmp_path: Path) -> None:
 
 
 def test_plugin_unknown_name(tmp_path: Path) -> None:
+    (tmp_path / ".fits").mkdir()
     (tmp_path / "plugin").mkdir()
     result = runner.invoke(
         app,

@@ -14,7 +14,12 @@ from snark.cli import app
 runner = CliRunner()
 
 
+def _write_fits_marker(root: Path) -> None:
+    (root / ".fits").mkdir()
+
+
 def test_create_initiative_calls_sync(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
     sync_calls: list[bool] = []
 
     def fake_sync(root: Path, *, prune: bool = False) -> Ok[None]:
@@ -35,6 +40,7 @@ def test_create_initiative_calls_sync(tmp_path: Path) -> None:
 
 
 def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
     with (
         patch("snark.cli.libfits_available", return_value=True),
         patch(
@@ -52,6 +58,7 @@ def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
 
 
 def test_delete_calls_sync_with_prune(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
     layout_dir = tmp_path / "goals"
     layout_dir.mkdir(parents=True)
     (layout_dir / "my-goal.md").write_text("# My Goal\n\nTBD.\n", encoding="utf-8")
@@ -74,6 +81,7 @@ def test_delete_calls_sync_with_prune(tmp_path: Path) -> None:
 
 
 def test_create_without_libfits_skips_sync(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
     with patch("snark.cli.libfits_available", return_value=False):
         result = runner.invoke(
             app,

@@ -56,6 +56,10 @@ goals/
 
 All natural names use **lowercase-kebab-case** (e.g. `billing-redesign`).
 
+Run `snark init` once at the roadmap root before other commands. It creates the markdown directories and the pyfits repository (`.fits/`, `nodes/`, `links/`). Graph sync commands do not create that scaffolding.
+
+When you run a command from a subdirectory, snark walks up to the nearest ancestor containing `.fits/`, stopping at the git root (the directory containing `.git`) so it does not search outside the work tree. `snark init` always targets the path you give (or cwd) and does not walk upward.
+
 ## Commands
 
 ```bash
@@ -73,7 +77,7 @@ snark plugin list
 snark plugin my-plugin
 ```
 
-`create`, `delete`, and `promote` update the pyfits graph and `.fits/registry.json` when libfits is installed (same sync as `validate --sync`). If graph sync fails after the markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` prunes removed entities from the graph; use `snark validate --prune` to prune stale objects after other edits.
+`create`, `delete`, and `promote` update the pyfits graph and `.fits/registry.json` when libfits is installed (same sync as `validate --sync`). Run `snark init` first; `validate --sync` will not bootstrap pyfits artifacts. If graph sync fails after the markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` prunes removed entities from the graph; use `snark validate --prune` to prune stale objects after other edits.
 
 ## Plugins
 
@@ -85,7 +89,7 @@ snark plugin --path /path/to/roadmap my-plugin
 snark plugin --path /path/to/roadmap my-plugin --help    # per-plugin argparse help
 ```
 
-When the shell cwd is the roadmap root, omit `--path`.
+When the shell cwd is inside the roadmap tree, omit `--path`; snark discovers the root automatically.
 
 Example `plugin/report-deps/__init__.py`:
 

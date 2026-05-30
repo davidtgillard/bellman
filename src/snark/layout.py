@@ -28,9 +28,73 @@ WORK_PACKAGES_TEMPLATE = """# Work packages
 """
 
 
+_FITS_DIR = ".fits"
+_GIT_DIR = ".git"
+
+
 def roadmap_root(path: Path | None) -> Path:
-    """Resolve roadmap root (default: cwd)."""
+    """Resolve roadmap root literally (default: cwd).
+
+    Does not walk parent directories. Use :func:`discover_roadmap_root` when
+    the caller should locate an existing initialized roadmap.
+
+    Args:
+        path: Explicit roadmap root, or ``None`` for the current directory.
+
+    Returns:
+        Resolved roadmap root path.
+    """
     return path if path is not None else Path.cwd()
+
+
+def _is_git_root(path: Path) -> bool:
+    return (path / _GIT_DIR).exists()
+
+
+def find_roadmap_root(start: Path) -> Path | None:
+    """Walk upward from ``start`` and return the nearest ancestor with ``.fits/``.
+
+    Stops at the git root (directory containing ``.git``) without crossing it.
+
+    Args:
+        start: Directory to begin searching from.
+
+    Returns:
+        The roadmap root when ``.fits/`` is found, otherwise ``None``.
+    """
+    current = start.resolve()
+    while True:
+        if (current / _FITS_DIR).is_dir():
+            return current
+        if _is_git_root(current):
+            return None
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def discover_roadmap_root(path: Path | None = None) -> Path:
+    """Resolve an initialized roadmap root by walking up from ``path`` or cwd.
+
+    Stops at the git root (directory containing ``.git``) without crossing it.
+
+    Args:
+        path: Starting directory, or ``None`` for the current directory.
+
+    Returns:
+        The nearest ancestor directory containing ``.fits/``.
+
+    Raises:
+        SnarkLayoutError: When no ``.fits/`` directory is found within the
+            search boundary.
+    """
+    start = path if path is not None else Path.cwd()
+    found = find_roadmap_root(start)
+    if found is None:
+        msg = f"no initialized snark roadmap found in {start} or ancestor directories"
+        raise SnarkLayoutError(msg)
+    return found
 
 
 def ensure_roadmap_dirs(root: Path) -> None:

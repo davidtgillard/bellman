@@ -8,7 +8,7 @@ import pytest
 from pyfits.result import Ok
 
 from snark.graph.link_naming import display_name, precedes_link_type
-from snark.graph.sync import libfits_available, sync_roadmap
+from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 from snark.model import Hardness, RelationType
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
@@ -28,6 +28,8 @@ def test_sync_example_roadmap(tmp_path: Path) -> None:
 
     shutil.copytree(EXAMPLES, tmp_path / "roadmap")
     root = tmp_path / "roadmap"
+    init_result = init_pyfits_repo(root)
+    assert isinstance(init_result, Ok)
     result = sync_roadmap(root)
     assert isinstance(result, Ok)
     repeat = sync_roadmap(root)

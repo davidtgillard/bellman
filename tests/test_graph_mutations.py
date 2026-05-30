@@ -9,7 +9,7 @@ from pyfits.result import Err, Ok
 
 from snark import layout
 from snark.graph.history import load_graph_history
-from snark.graph.sync import libfits_available, sync_roadmap
+from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 
 
 def _instance_type(root: Path, instance_id: str) -> str | None:
@@ -26,11 +26,17 @@ def _has_live_instance(root: Path, instance_id: str) -> bool:
     return _instance_type(root, instance_id) is not None
 
 
+def _bootstrap_pyfits(root: Path) -> None:
+    result = init_pyfits_repo(root)
+    assert isinstance(result, Ok)
+
+
 @pytest.mark.integration
 def test_create_initiative_registers_in_graph(tmp_path: Path) -> None:
     if not libfits_available():
         pytest.skip("libfits not available")
     layout.ensure_roadmap_dirs(tmp_path)
+    _bootstrap_pyfits(tmp_path)
     layout.create_initiative(tmp_path, "settings-manager")
     result = sync_roadmap(tmp_path)
     assert isinstance(result, Ok)
@@ -43,6 +49,7 @@ def test_delete_prunes_graph_node(tmp_path: Path) -> None:
     if not libfits_available():
         pytest.skip("libfits not available")
     layout.ensure_roadmap_dirs(tmp_path)
+    _bootstrap_pyfits(tmp_path)
     layout.create_goal(tmp_path, "my-goal")
     assert isinstance(sync_roadmap(tmp_path), Ok)
     assert _has_live_instance(tmp_path, "my-goal")
@@ -60,6 +67,7 @@ def test_promote_registers_project(tmp_path: Path) -> None:
     if not libfits_available():
         pytest.skip("libfits not available")
     layout.ensure_roadmap_dirs(tmp_path)
+    _bootstrap_pyfits(tmp_path)
     layout.create_initiative(tmp_path, "grow-feature")
     assert isinstance(sync_roadmap(tmp_path), Ok)
     assert _instance_type(tmp_path, "grow-feature") == "initiative"

@@ -97,6 +97,10 @@ def _prune_stale_graph(
     pruned = _prune_stale_registry(repo, root, desired)
     if isinstance(pruned, Err):
         return pruned
+    reloaded = _reload_graph(repo)
+    if isinstance(reloaded, Err):
+        return reloaded
+    graph = reloaded.ok_value
     stale_nodes = [n for n in graph.nodes if n.id.value not in desired]
     for node in stale_nodes:
         removed = repo.remove(node.id)
@@ -274,12 +278,19 @@ def _sync_scope_dependencies(
     return Ok(None)
 
 
-def sync_roadmap(
-    root: Path,
-    *,
-    prune: bool = False,
-) -> Result[None, FitsError]:
-    """Load roadmap and sync nodes/links into pyfits repository at ``root``."""
+def init_pyfits_repo(root: Path) -> Result[None, FitsError]:
+    """Initialize pyfits repository scaffolding at ``root``.
+
+    Creates ``.fits/``, graph roots, and registers snark types when missing.
+    Idempotent when the repository is already initialized.
+
+    Args:
+        root: Roadmap root directory.
+
+    Returns:
+        ``Ok(None)`` when initialization succeeds or was already done.
+        ``Err(FitsError)`` when libfits is unavailable or initialization fails.
+    """
     if not libfits_available():
         return Err(
             FitsError(
@@ -287,7 +298,6 @@ def sync_roadmap(
                 code="lib_not_found",
             )
         )
-    roadmap = load(root)
     open_result = Repo.open(root)
     if isinstance(open_result, Err):
         return open_result
@@ -297,6 +307,51 @@ def sync_roadmap(
             init_res = repo.init()
             if isinstance(init_res, Err):
                 return init_res
+        boot = bootstrap_registry(repo)
+        if isinstance(boot, Err):
+            return boot
+    return Ok(None)
+
+
+def sync_roadmap(
+    root: Path,
+    *,
+    prune: bool = False,
+) -> Result[None, FitsError]:
+    """Load roadmap and sync nodes/links into pyfits repository at ``root``.
+
+    Requires an initialized pyfits repository (``snark init``). Does not create
+    ``.fits/``, ``nodes/``, or ``links/``.
+
+    Args:
+        root: Roadmap root directory.
+        prune: When True, remove graph objects no longer present in markdown.
+
+    Returns:
+        ``Ok(None)`` when sync and libfits validation succeed.
+        ``Err(FitsError)`` when libfits is unavailable, the repo is not
+        initialized, or sync/validation fails.
+    """
+    if not libfits_available():
+        return Err(
+            FitsError(
+                "libfits not available; set PYFITS_LIB_PATH or build ../fits",
+                code="lib_not_found",
+            )
+        )
+    if not (root / ".fits").is_dir():
+        return Err(
+            FitsError(
+                "Roadmap not initialized; run snark init",
+                code="not_initialized",
+            )
+        )
+    roadmap = load(root)
+    open_result = Repo.open(root)
+    if isinstance(open_result, Err):
+        return open_result
+    repo = open_result.ok_value
+    with repo:
         boot = bootstrap_registry(repo)
         if isinstance(boot, Err):
             return boot

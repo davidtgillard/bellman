@@ -11,7 +11,7 @@ from pyfits.result import Err
 from snark import layout
 from snark._version import version_string
 from snark.errors import SnarkLayoutError
-from snark.graph.sync import libfits_available, sync_roadmap
+from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 from snark.plugin.cli import register_plugin_command
 from snark.roadmap import load
 from snark.update import maybe_notify_update, run_update_command
@@ -31,7 +31,11 @@ def _cli_entry(ctx: typer.Context) -> None:
 
 
 def _root(path: Path | None) -> Path:
-    return layout.roadmap_root(path)
+    try:
+        return layout.discover_roadmap_root(path)
+    except SnarkLayoutError as exc:
+        typer.echo(exc.message, err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
@@ -54,16 +58,23 @@ def init(
     ] = None,
 ) -> None:
     """Initialize roadmap directories and pyfits repository."""
-    root = _root(path)
+    root = layout.roadmap_root(path)
     layout.ensure_roadmap_dirs(root)
     typer.echo(f"Initialized roadmap at {root}")
     if libfits_available():
-        sync_result = sync_roadmap(root)
-        if isinstance(sync_result, Err):
+        init_result = init_pyfits_repo(root)
+        if isinstance(init_result, Err):
             typer.echo(
-                f"Warning: graph bootstrap failed: {sync_result.err_value}",
+                f"Warning: graph bootstrap failed: {init_result.err_value}",
                 err=True,
             )
+        else:
+            sync_result = sync_roadmap(root)
+            if isinstance(sync_result, Err):
+                typer.echo(
+                    f"Warning: graph bootstrap failed: {sync_result.err_value}",
+                    err=True,
+                )
     else:
         typer.echo(
             "Note: libfits not found; run validate after installing libfits.",
