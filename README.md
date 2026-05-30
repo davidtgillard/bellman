@@ -69,7 +69,48 @@ snark validate .
 snark version
 snark update --check
 snark delete my-goal
+snark plugin list
+snark plugin my-plugin
 ```
+
+## Plugins
+
+Repo-local Python plugins live under `plugin/{name}/` in the roadmap root. Each plugin exports a `PLUGIN` object (`SnarkPlugin` from `snark.plugin`). Plugins require a **Python install** of snark (`uv run snark` or `pip install`); the standalone PyInstaller binary cannot load arbitrary repo Python.
+
+```bash
+snark plugin --path /path/to/roadmap list
+snark plugin --path /path/to/roadmap my-plugin
+snark plugin --path /path/to/roadmap my-plugin --help    # per-plugin argparse help
+```
+
+When the shell cwd is the roadmap root, omit `--path`.
+
+Example `plugin/report-deps/__init__.py`:
+
+```python
+from snark.plugin import (
+    PluginArgumentSpecs,
+    PluginArguments,
+    SnarkContext,
+    SnarkPlugin,
+    TextIO,
+)
+
+def run(ctx: SnarkContext, args: PluginArguments, io: TextIO) -> int:
+    for scope in ctx.roadmap().all_work_scopes():
+        for edge in scope.dependencies:
+            io.writeline(f"{edge.predecessor} -> {edge.successor}")
+    return 0
+
+PLUGIN = SnarkPlugin(
+    name="report-deps",
+    summary="Print scope precedence edges",
+    args=PluginArgumentSpecs.empty(),
+    run=run,
+)
+```
+
+`SnarkContext` provides lazy access to the markdown roadmap (`roadmap()`), pyfits graph (`graph()`), registry audit history (`history()` — renames, tombstones, live instances from `.fits/registry.json`), and `sync_roadmap()`. Use `TextIO` for stdout/stderr so output is testable.
 
 ## Link naming
 

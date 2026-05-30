@@ -3,7 +3,7 @@ name = "snark"
 version = "0.1.0"
 description = "Markdown-first roadmap planning built on pyfits"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.15"
 license = { text = "AGPL-3.0-or-later" }
 dependencies = [
     "basedpyright>=1.29.0",
@@ -16,6 +16,7 @@ dependencies = [
     "result>=0.17.0",
     "semver>=3.0.4",
     "typer>=0.15.0",
+    "click>=8.1.0",
 ]
 
 [project.scripts]
@@ -29,7 +30,7 @@ build-backend = "uv_build"
 pyfits = [
     { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp312-cp312-manylinux_2_36_x86_64.whl", marker = "python_version == '3.12'" },
     { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp313-cp313-manylinux_2_36_x86_64.whl", marker = "python_version == '3.13'" },
-    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl", marker = "python_version >= '3.14'" },
+    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl", marker = "python_version == '3.14'" },
 ]
 
 [dependency-groups]
@@ -65,6 +66,18 @@ addopts = [
 [tool.coverage.run]
 branch = true
 source = ["snark"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests", "packaging"]
+exclude = ["packaging/"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "shellingham.*"
+ignore_missing_imports = true
 
 [tool.pyright]
 include = ["src"]

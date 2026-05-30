@@ -12,6 +12,7 @@ from snark import layout
 from snark._version import version_string
 from snark.errors import SnarkLayoutError
 from snark.graph.sync import libfits_available, sync_roadmap
+from snark.plugin.cli import register_plugin_command
 from snark.roadmap import load
 from snark.update import maybe_notify_update, run_update_command
 from snark.validate import validate_roadmap
@@ -220,6 +221,9 @@ def update(
 def version() -> None:
     """Print the installed snark version."""
     typer.echo(version_string())
+
+
+register_plugin_command(app)
 
 
 def main() -> None:
