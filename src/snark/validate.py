@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from snark.errors import SnarkError
 from snark.model import Hardness, PrecedenceEdge, Roadmap, WorkPackage
+from snark.naming import slugify
 
 
 def _collect_wp_edges(
@@ -188,6 +189,28 @@ def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
         if milestone.date == "YYYY-MM-DD" or len(milestone.date) != 10:
             errors.append(
                 SnarkError(milestone.path, "milestone date must be YYYY-MM-DD")
+            )
+
+    for goal in roadmap.goals:
+        if not goal.title.strip():
+            errors.append(
+                SnarkError(goal.path, "goal missing top-level header")
+            )
+        else:
+            try:
+                title_matches = slugify(goal.title) == goal.name
+            except ValueError:
+                title_matches = False
+            if not title_matches:
+                errors.append(
+                    SnarkError(
+                        goal.path,
+                        f"goal header {goal.title!r} does not match name {goal.name!r}",
+                    )
+                )
+        if not goal.description.strip():
+            errors.append(
+                SnarkError(goal.path, "goal missing content beneath header")
             )
 
     return errors

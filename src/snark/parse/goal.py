@@ -14,8 +14,8 @@ def parse_goal(path: Path) -> Goal:
     text = path.read_text(encoding="utf-8")
     name = normalize_entity_name(path.stem)
     title, sections = split_sections(text)
-    if title is None:
-        msg = f"missing title in {path}"
+    if title is None or not title.strip():
+        msg = f"missing top-level header (# heading) in {path}"
         raise ValueError(msg)
     body_parts: list[str] = []
     for line in text.splitlines():
