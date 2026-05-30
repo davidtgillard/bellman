@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -10,9 +11,35 @@ STATE_FILENAME = "snark-state.json"
 SETTINGS_FILENAME = "snark-settings.toml"
 
 
+def running_executable() -> Path:
+    """Path to the running snark executable.
+
+    ``sys.argv[0]`` is often a bare command name (for example ``snark``) when
+    the binary is on ``PATH``, which would resolve relative to the current
+    working directory. Prefer ``sys.executable`` for PyInstaller builds and
+    ``shutil.which`` for bare names before falling back to ``argv[0]``.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve()
+
+    argv0 = Path(sys.argv[0])
+    if argv0.is_absolute() or argv0.parent != Path("."):
+        return argv0.resolve()
+
+    found = shutil.which(sys.argv[0])
+    if found is not None:
+        return Path(found).resolve()
+
+    proc_exe = Path("/proc/self/exe")
+    if proc_exe.is_symlink():
+        return proc_exe.resolve()
+
+    return argv0.resolve()
+
+
 def executable_dir() -> Path:
-    """Directory containing the snark executable (argv[0])."""
-    return Path(sys.argv[0]).resolve().parent
+    """Directory containing the snark executable."""
+    return running_executable().parent
 
 
 def home_snark_dir() -> Path:
@@ -57,4 +84,4 @@ def state_write_path() -> Path:
 
 def target_binary_path() -> Path:
     """Path to the running snark binary."""
-    return Path(sys.argv[0]).resolve()
+    return running_executable()

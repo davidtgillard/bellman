@@ -16,7 +16,11 @@ from snark.update.github import (
     latest_linux_asset,
     parse_version_from_asset_name,
 )
-from snark.update.install import apply_binary_update, is_frozen
+from snark.update.install import (
+    apply_binary_update,
+    is_frozen,
+    verify_update_permissions,
+)
 from snark.update.settings import UpdateSettings, load_settings
 from snark.update.state import SnarkState
 
@@ -149,6 +153,7 @@ def run_update_command(*, check_only: bool) -> None:
 
     settings = load_settings()
     try:
+        verify_update_permissions()
         staging = download_asset(result.asset, settings=settings)
         apply_binary_update(
             staging,

@@ -19,8 +19,13 @@ from snark.update.check import (
     should_run_background_check,
 )
 from snark.update.github import GitHubRelease, ReleaseAsset, latest_linux_asset
-from snark.update.install import is_frozen
-from snark.update.paths import settings_path, state_write_path
+from snark.update.install import is_frozen, verify_update_permissions
+from snark.update.paths import (
+    running_executable,
+    settings_path,
+    state_write_path,
+    target_binary_path,
+)
 from snark.update.settings import UpdateSettings
 from snark.update.state import SnarkState
 
@@ -274,3 +279,110 @@ def test_state_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_is_frozen_false_in_tests() -> None:
     assert not is_frozen()
+
+
+def test_running_executable_frozen_uses_sys_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "bin" / "snark"
+    binary.parent.mkdir()
+    binary.write_bytes(b"fake")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(binary))
+    monkeypatch.setattr(sys, "argv", ["snark"])
+    assert running_executable() == binary.resolve()
+    assert target_binary_path() == binary.resolve()
+
+
+def test_running_executable_bare_name_uses_which(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "snark"
+    binary.write_bytes(b"fake")
+    binary.chmod(0o755)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setattr(sys, "argv", ["snark"])
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert running_executable() == binary.resolve()
+
+
+def test_verify_update_permissions_requires_writable_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "snark"
+    binary.write_bytes(b"fake")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(binary))
+    monkeypatch.setattr(sys, "argv", ["snark"])
+    assert verify_update_permissions() == binary.resolve()
+
+
+def test_verify_update_permissions_missing_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "missing-snark"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(binary))
+    monkeypatch.setattr(sys, "argv", ["snark"])
+    with pytest.raises(OSError, match="not found"):
+        verify_update_permissions()
+
+
+@patch("snark.update.check.download_asset")
+@patch("snark.update.check.verify_update_permissions")
+@patch("snark.update.check.fetch_release")
+def test_cli_update_checks_permissions_before_download(
+    mock_fetch: MagicMock,
+    mock_verify: MagicMock,
+    mock_download: MagicMock,
+) -> None:
+    mock_fetch.return_value = GitHubRelease(
+        tag_name="dev",
+        assets=(_asset(200, "0.2.0"),),
+    )
+    mock_verify.side_effect = OSError("cannot update: no write permission")
+    with (
+        patch("snark.update.check.get_version", return_value=V0_1_0),
+        patch("snark.update.check.is_frozen", return_value=True),
+    ):
+        result = runner.invoke(app, ["update"])
+    assert result.exit_code == 1
+    assert "no write permission" in result.stderr
+    mock_verify.assert_called_once()
+    mock_download.assert_not_called()
+
+
+@patch("snark.update.check.apply_binary_update")
+@patch("snark.update.check.download_asset")
+@patch("snark.update.check.verify_update_permissions")
+@patch("snark.update.check.fetch_release")
+def test_cli_update_replaces_running_executable(
+    mock_fetch: MagicMock,
+    mock_verify: MagicMock,
+    mock_download: MagicMock,
+    mock_apply: MagicMock,
+    tmp_path: Path,
+) -> None:
+    binary = tmp_path / "snark"
+    binary.write_bytes(b"old")
+    staging = tmp_path / "staging"
+    staging.write_bytes(b"new")
+    mock_fetch.return_value = GitHubRelease(
+        tag_name="dev",
+        assets=(_asset(200, "0.2.0"),),
+    )
+    mock_verify.return_value = binary
+    mock_download.return_value = staging
+    with (
+        patch("snark.update.check.get_version", return_value=V0_1_0),
+        patch("snark.update.check.is_frozen", return_value=True),
+    ):
+        result = runner.invoke(app, ["update"])
+    assert result.exit_code == 0
+    mock_verify.assert_called_once()
+    mock_download.assert_called_once()
+    mock_apply.assert_called_once_with(
+        staging,
+        version="0.2.0",
+        asset_id=200,
+    )
