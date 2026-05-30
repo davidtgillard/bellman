@@ -13,18 +13,10 @@ from snark.parse.work_scope import parse_work_scope
 
 def _parse_archived_initiative(path: Path) -> Initiative:
     """Parse ``{name}.archived.md`` preserving the original initiative name."""
-    initiative = parse_work_scope(path, is_project=False)
-    assert isinstance(initiative, Initiative)
     name = path.name[: -len(layout.ARCHIVED_SUFFIX)]
-    return Initiative(
-        name=name,
-        title=initiative.title,
-        path=initiative.path,
-        introduction=initiative.introduction,
-        motivation=initiative.motivation,
-        detailed_description=initiative.detailed_description,
-        dependencies=initiative.dependencies,
-    )
+    initiative = parse_work_scope(path, is_project=False, name=name)
+    assert isinstance(initiative, Initiative)
+    return initiative
 
 
 def load(root: Path) -> Roadmap:

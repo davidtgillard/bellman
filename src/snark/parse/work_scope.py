@@ -26,6 +26,7 @@ def parse_work_scope(
     *,
     is_project: Literal[False],
     work_packages_path: Path | None = None,
+    name: str | None = None,
 ) -> Initiative: ...
 
 
@@ -35,6 +36,7 @@ def parse_work_scope(
     *,
     is_project: Literal[True],
     work_packages_path: Path | None = None,
+    name: str | None = None,
 ) -> Project: ...
 
 
@@ -43,10 +45,12 @@ def parse_work_scope(
     *,
     is_project: bool,
     work_packages_path: Path | None = None,
+    name: str | None = None,
 ) -> Initiative | Project:
     """Parse a WorkScope markdown file."""
     text = path.read_text(encoding="utf-8")
-    name = normalize_entity_name(path.stem)
+    resolved = name if name is not None else path.stem
+    entity_name = normalize_entity_name(resolved)
     rel_path = str(path)
     title, sections = split_sections(text)
     if title is None:
@@ -59,10 +63,10 @@ def parse_work_scope(
 
     deps_sec = section_by_title(sections, "Dependencies")
     dep_body = deps_sec.body if deps_sec is not None else ""
-    dependencies = tuple(parse_dependencies_section(dep_body, successor=name))
+    dependencies = tuple(parse_dependencies_section(dep_body, successor=entity_name))
 
     base = WorkScope(
-        name=name,
+        name=entity_name,
         title=title,
         path=rel_path,
         introduction=introduction,
@@ -101,7 +105,9 @@ def parse_work_scope(
 
     packages: tuple[WorkPackage, ...] = ()
     if work_packages_path is not None and work_packages_path.is_file():
-        packages = tuple(parse_work_packages(work_packages_path, project_name=name))
+        packages = tuple(
+            parse_work_packages(work_packages_path, project_name=entity_name)
+        )
 
     return Project(
         name=base.name,

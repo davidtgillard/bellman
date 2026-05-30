@@ -1,0 +1,84 @@
+"""CLI tests for post-mutation graph sync."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+from pyfits.errors import FitsError
+from pyfits.result import Err, Ok
+from typer.testing import CliRunner
+
+from snark.cli import app
+
+runner = CliRunner()
+
+
+def test_create_initiative_calls_sync(tmp_path: Path) -> None:
+    sync_calls: list[bool] = []
+
+    def fake_sync(root: Path, *, prune: bool = False) -> Ok[None]:
+        sync_calls.append(prune)
+        return Ok(None)
+
+    with (
+        patch("snark.cli.libfits_available", return_value=True),
+        patch("snark.cli.sync_roadmap", side_effect=fake_sync),
+    ):
+        result = runner.invoke(
+            app,
+            ["create", "initiative", "my-init", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert sync_calls == [False]
+    assert "Graph sync passed." in result.output
+
+
+def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
+    with (
+        patch("snark.cli.libfits_available", return_value=True),
+        patch(
+            "snark.cli.sync_roadmap",
+            return_value=Err(FitsError("boom", code="test")),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["create", "initiative", "my-init", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 1
+    assert (tmp_path / "initiatives" / "my-init.md").is_file()
+    assert "Graph sync failed" in result.output
+
+
+def test_delete_calls_sync_with_prune(tmp_path: Path) -> None:
+    layout_dir = tmp_path / "goals"
+    layout_dir.mkdir(parents=True)
+    (layout_dir / "my-goal.md").write_text("# My Goal\n\nTBD.\n", encoding="utf-8")
+    sync_calls: list[bool] = []
+
+    def fake_sync(root: Path, *, prune: bool = False) -> Ok[None]:
+        sync_calls.append(prune)
+        return Ok(None)
+
+    with (
+        patch("snark.cli.libfits_available", return_value=True),
+        patch("snark.cli.sync_roadmap", side_effect=fake_sync),
+    ):
+        result = runner.invoke(
+            app,
+            ["delete", "my-goal", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert sync_calls == [True]
+
+
+def test_create_without_libfits_skips_sync(tmp_path: Path) -> None:
+    with patch("snark.cli.libfits_available", return_value=False):
+        result = runner.invoke(
+            app,
+            ["create", "initiative", "my-init", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert "libfits not found" in result.output
+    assert "Graph sync passed." not in result.output

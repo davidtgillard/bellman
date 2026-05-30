@@ -34,6 +34,18 @@ def _root(path: Path | None) -> Path:
     return layout.roadmap_root(path)
 
 
+def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
+    """Sync markdown roadmap into pyfits after a layout mutation."""
+    if not libfits_available():
+        typer.echo("Note: libfits not found; graph not updated.", err=True)
+        return
+    result = sync_roadmap(root, prune=prune)
+    if isinstance(result, Err):
+        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Graph sync passed.")
+
+
 @app.command()
 def init(
     path: Annotated[
@@ -77,6 +89,7 @@ def create_initiative(
     except (SnarkLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root)
 
 
 @create_app.command("project")
@@ -93,6 +106,7 @@ def create_project(
     except (SnarkLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root)
 
 
 @create_app.command("milestone")
@@ -109,6 +123,7 @@ def create_milestone(
     except (SnarkLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root)
 
 
 @create_app.command("goal")
@@ -125,6 +140,7 @@ def create_goal(
     except (SnarkLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root)
 
 
 @app.command()
@@ -141,6 +157,7 @@ def delete(
     except SnarkLayoutError as exc:
         typer.echo(exc.message, err=True)
         raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root, prune=True)
 
 
 @app.command()
@@ -156,6 +173,7 @@ def promote(
     except (SnarkLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root)
 
 
 @app.command()

@@ -13,6 +13,7 @@ from pyfits.result import Err, Ok, Result
 from snark import layout
 from snark.graph import link_naming
 from snark.graph.fits_errors import ignore_duplicate_instance, ignore_duplicate_link
+from snark.graph.history import load_graph_history
 from snark.graph.registry import bootstrap_registry
 from snark.model import Initiative, Project, Roadmap, WorkPackage
 from snark.roadmap import load
@@ -42,6 +43,88 @@ def _goal_node_id(name: str) -> Id:
 
 def _graph_node_ids(graph: Graph) -> set[str]:
     return {n.id.value for n in graph.nodes}
+
+
+def _reload_graph(repo: Repo) -> Result[Graph, FitsError]:
+    """Refresh the in-memory graph snapshot from the repository."""
+    return repo.output_graph()
+
+
+def _desired_graph_node_ids(roadmap: Roadmap) -> set[str]:
+    """Opaque node ids that should exist after a full roadmap sync."""
+    desired: set[str] = set()
+    for initiative in roadmap.initiatives:
+        desired.add(_scope_node_id(initiative).value)
+    for archived in roadmap.archived_initiatives:
+        if roadmap.project_by_name(archived.name) is None:
+            desired.add(_scope_node_id(archived).value)
+    for project in roadmap.projects:
+        desired.add(_scope_node_id(project).value)
+        for wp, _ in _flatten_wps(project.work_packages, None, project.name):
+            desired.add(_wp_node_id(project.name, wp.slug).value)
+    for milestone in roadmap.milestones:
+        desired.add(_milestone_node_id(milestone.name).value)
+    for goal in roadmap.goals:
+        desired.add(_goal_node_id(goal.name).value)
+    return desired
+
+
+def _prune_stale_registry(
+    repo: Repo,
+    root: Path,
+    desired: set[str],
+) -> Result[None, FitsError]:
+    """Remove live registry instances whose opaque id is not in ``desired``."""
+    history_result = load_graph_history(root)
+    if isinstance(history_result, Err):
+        return Ok(None)
+    for inst in history_result.ok_value.instances:
+        if inst.kind != "node" or inst.instance_id in desired:
+            continue
+        removed = repo.remove(Id(inst.instance_id))
+        if isinstance(removed, Err):
+            return removed
+    return Ok(None)
+
+
+def _prune_stale_graph(
+    repo: Repo,
+    root: Path,
+    graph: Graph,
+    desired: set[str],
+) -> Result[Graph, FitsError]:
+    """Remove stale nodes from the registry and graph snapshot."""
+    pruned = _prune_stale_registry(repo, root, desired)
+    if isinstance(pruned, Err):
+        return pruned
+    stale_nodes = [n for n in graph.nodes if n.id.value not in desired]
+    for node in stale_nodes:
+        removed = repo.remove(node.id)
+        if isinstance(removed, Err):
+            return removed
+    if stale_nodes:
+        reloaded = _reload_graph(repo)
+        if isinstance(reloaded, Err):
+            return reloaded
+        graph = reloaded.ok_value
+    stale_edges = [
+        edge
+        for edge in graph.edges
+        if edge.from_id.value not in desired or edge.to_id.value not in desired
+    ]
+    for edge in stale_edges:
+        link_id = edge.id
+        if link_id is None:
+            continue
+        removed = repo.remove(link_id)
+        if isinstance(removed, Err):
+            return removed
+    if stale_edges:
+        reloaded = _reload_graph(repo)
+        if isinstance(reloaded, Err):
+            return reloaded
+        return Ok(reloaded.ok_value)
+    return Ok(graph)
 
 
 def _ensure_node(
@@ -163,12 +246,15 @@ def _sync_scope_dependencies(
     sid = _scope_node_id(scope)
 
     def resolve_scope(ref: str) -> Id:
-        for initiative in (*roadmap.initiatives, *roadmap.archived_initiatives):
-            if initiative.name == ref:
-                return _scope_node_id(initiative)
         proj = roadmap.project_by_name(ref)
         if proj is not None:
             return _scope_node_id(proj)
+        for initiative in roadmap.initiatives:
+            if initiative.name == ref:
+                return _scope_node_id(initiative)
+        for archived in roadmap.archived_initiatives:
+            if archived.name == ref and roadmap.project_by_name(ref) is None:
+                return _scope_node_id(archived)
         return Id(ref)
 
     for edge in scope.dependencies:
@@ -194,7 +280,6 @@ def sync_roadmap(
     prune: bool = False,
 ) -> Result[None, FitsError]:
     """Load roadmap and sync nodes/links into pyfits repository at ``root``."""
-    _ = prune
     if not libfits_available():
         return Err(
             FitsError(
@@ -220,7 +305,7 @@ def sync_roadmap(
             return graph_result
         graph = graph_result.ok_value
 
-        for initiative in (*roadmap.initiatives, *roadmap.archived_initiatives):
+        for initiative in roadmap.initiatives:
             nid = _scope_node_id(initiative)
             res = _ensure_node(
                 repo,
@@ -232,8 +317,30 @@ def sync_roadmap(
             if isinstance(res, Err):
                 return res
 
+        for archived in roadmap.archived_initiatives:
+            if roadmap.project_by_name(archived.name) is not None:
+                continue
+            nid = _scope_node_id(archived)
+            res = _ensure_node(
+                repo,
+                graph,
+                type_name="initiative",
+                node_id=nid,
+                title=archived.title,
+            )
+            if isinstance(res, Err):
+                return res
+
         for project in roadmap.projects:
             pid = _scope_node_id(project)
+            if layout.archived_initiative_path(root, project.name).exists():
+                removed = repo.remove(pid)
+                if isinstance(removed, Err):
+                    return removed
+                reloaded = _reload_graph(repo)
+                if isinstance(reloaded, Err):
+                    return reloaded
+                graph = reloaded.ok_value
             res = _ensure_node(
                 repo,
                 graph,
@@ -243,20 +350,6 @@ def sync_roadmap(
             )
             if isinstance(res, Err):
                 return res
-            if layout.archived_initiative_path(root, project.name).exists():
-                iid = Id(project.name)
-                promo = _ensure_link(
-                    repo,
-                    graph,
-                    link_type="promoted_from",
-                    in_id=pid,
-                    out_id=iid,
-                    target_id=link_naming.wire_target_id(
-                        "promoted_from", pid.value, iid.value
-                    ),
-                )
-                if isinstance(promo, Err):
-                    return promo
             wp_sync = _sync_project_wps(repo, graph, project)
             if isinstance(wp_sync, Err):
                 return wp_sync
@@ -289,6 +382,14 @@ def sync_roadmap(
             dep_sync = _sync_scope_dependencies(repo, graph, roadmap, scope)
             if isinstance(dep_sync, Err):
                 return dep_sync
+
+        if prune:
+            pruned = _prune_stale_graph(
+                repo, root, graph, _desired_graph_node_ids(roadmap)
+            )
+            if isinstance(pruned, Err):
+                return pruned
+            graph = pruned.ok_value
 
         val = repo.validate()
         if isinstance(val, Err):

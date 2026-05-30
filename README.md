@@ -73,6 +73,8 @@ snark plugin list
 snark plugin my-plugin
 ```
 
+`create`, `delete`, and `promote` update the pyfits graph and `.fits/registry.json` when libfits is installed (same sync as `validate --sync`). If graph sync fails after the markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` prunes removed entities from the graph; use `snark validate --prune` to prune stale objects after other edits.
+
 ## Plugins
 
 Repo-local Python plugins live under `plugin/{name}/` in the roadmap root. Each plugin exports a `PLUGIN` object (`SnarkPlugin` from `snark.plugin`). Plugins require a **Python install** of snark (`uv run snark` or `pip install`); the standalone PyInstaller binary cannot load arbitrary repo Python.
