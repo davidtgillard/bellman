@@ -49,7 +49,7 @@ initiatives/          # one .md per initiative (default)
 projects/             # one folder per project
   {name}/
     {name}.md
-    work-packages.md
+    work-packages.yaml
 milestones/
 goals/
 ```

@@ -44,7 +44,7 @@ def test_create_project(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     pdir = layout.create_project(tmp_path, "my-project")
     assert (pdir / "my-project.md").is_file()
-    assert (pdir / "work-packages.md").is_file()
+    assert (pdir / "work-packages.yaml").is_file()
 
 
 def test_promote_initiative(tmp_path: Path) -> None:

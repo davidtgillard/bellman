@@ -1,0 +1,21 @@
+version: 1
+
+work_packages:
+  - title: wp-invoicing
+    description: Core invoicing flow.
+    estimate:
+      optimistic: 2w
+      most_likely: 4w
+      pessimistic: 7w
+    sub_packages:
+      - title: wp-pdf-export
+        description: PDF generation and delivery.
+        estimate:
+          optimistic: 1w
+          most_likely: 2w
+          pessimistic: 4w
+        dependencies:
+          - after: wp-invoicing
+            relation: FS
+            hardness: Mandatory
+    dependencies: []

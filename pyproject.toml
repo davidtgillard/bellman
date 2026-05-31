@@ -13,6 +13,7 @@ dependencies = [
     "pytest-cov>=6.0.0",
     "ruff>=0.15.13",
     "pyfits",
+    "pyyaml>=6.0.0",
     "result>=0.17.0",
     "semver>=3.0.4",
     "typer>=0.15.0",

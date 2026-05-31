@@ -41,7 +41,7 @@ class ThreePointEstimate:
     optimistic: float
     most_likely: float
     pessimistic: float
-    unit: Literal["days", "weeks"]
+    unit: Literal["h", "d", "w"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,9 +86,11 @@ class WorkPackage:
     """Decomposable unit of work within a project."""
 
     slug: str
+    title: str
     description: str
-    estimate: Estimate | None
-    children: tuple[WorkPackage, ...] = ()
+    notes: str = ""
+    estimate: Estimate | None = None
+    sub_packages: tuple[WorkPackage, ...] = ()
     dependencies: tuple[PrecedenceEdge, ...] = ()
 
 
@@ -165,7 +167,7 @@ class Roadmap:
         def walk(packages: tuple[WorkPackage, ...]) -> None:
             for wp in packages:
                 slugs.add(wp.slug)
-                walk(wp.children)
+                walk(wp.sub_packages)
 
         walk(project.work_packages)
         return slugs

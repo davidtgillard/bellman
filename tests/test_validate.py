@@ -37,7 +37,7 @@ def _write_project_with_wp(root: Path, wp_content: str) -> None:
         "## Dependencies\n\n",
         encoding="utf-8",
     )
-    (project_dir / "work-packages.md").write_text(wp_content, encoding="utf-8")
+    (project_dir / "work-packages.yaml").write_text(wp_content, encoding="utf-8")
 
 
 def test_goal_header_must_match_name(tmp_path: Path) -> None:
@@ -70,7 +70,11 @@ def test_goal_missing_header_fails_at_load(tmp_path: Path) -> None:
 def test_unknown_estimate_warns(tmp_path: Path) -> None:
     _write_project_with_wp(
         tmp_path,
-        "# Work packages\n\n## wp-foo\n\nDescription.\n\n### Estimate\n\nunknown\n",
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-foo\n"
+        "    description: Description.\n"
+        "    estimate: unknown\n",
     )
     roadmap = load(tmp_path)
     result = validate_roadmap(roadmap)
@@ -82,7 +86,10 @@ def test_unknown_estimate_warns(tmp_path: Path) -> None:
 def test_missing_estimate_errors(tmp_path: Path) -> None:
     _write_project_with_wp(
         tmp_path,
-        "# Work packages\n\n## wp-foo\n\nDescription.\n\n",
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-foo\n"
+        "    description: Description.\n",
     )
     roadmap = load(tmp_path)
     result = validate_roadmap(roadmap)

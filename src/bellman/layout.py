@@ -23,8 +23,9 @@ WORK_SCOPE_SECTIONS = (
 
 PROJECT_EXTRA = "### Criteria for Success\n\nTBD.\n\n"
 
-WORK_PACKAGES_TEMPLATE = """# Work packages
+WORK_PACKAGES_TEMPLATE = """version: 1
 
+work_packages: []
 """
 
 
@@ -120,7 +121,7 @@ def project_md_path(root: Path, name: str) -> Path:
 
 
 def work_packages_path(root: Path, name: str) -> Path:
-    return project_dir(root, name) / "work-packages.md"
+    return project_dir(root, name) / "work-packages.yaml"
 
 
 def milestone_path(root: Path, name: str) -> Path:

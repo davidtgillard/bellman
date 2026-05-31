@@ -26,7 +26,7 @@ def _collect_wp_edges(
         for wp in wps:
             for edge in wp.dependencies:
                 edges.append((project_name, edge))
-            walk(wp.children)
+            walk(wp.sub_packages)
 
     walk(packages)
     return edges
@@ -40,7 +40,7 @@ def _collect_wp_slugs(
     def walk(wps: tuple[WorkPackage, ...]) -> None:
         for wp in wps:
             slugs.append((wp.slug, 0))
-            walk(wp.children)
+            walk(wp.sub_packages)
 
     walk(packages)
     return slugs
@@ -242,7 +242,7 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
 
 def layout_wp_path(roadmap: Roadmap, project_name: str, slug: str) -> str:
     """Best-effort path for error reporting."""
-    return f"{roadmap.root}/projects/{project_name}/work-packages.md ({slug})"
+    return f"{roadmap.root}/projects/{project_name}/work-packages.yaml ({slug})"
 
 
 def _normalize_wp_ref(ref: str, project_name: str) -> str:
@@ -257,7 +257,7 @@ def _walk_packages(packages: tuple[WorkPackage, ...]) -> list[WorkPackage]:
     def walk(wps: tuple[WorkPackage, ...]) -> None:
         for wp in wps:
             out.append(wp)
-            walk(wp.children)
+            walk(wp.sub_packages)
 
     walk(packages)
     return out

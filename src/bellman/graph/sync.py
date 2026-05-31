@@ -189,7 +189,7 @@ def _flatten_wps(
     out: list[tuple[WorkPackage, WorkPackage | None]] = []
     for wp in packages:
         out.append((wp, parent))
-        out.extend(_flatten_wps(wp.children, wp, project_name))
+        out.extend(_flatten_wps(wp.sub_packages, wp, project_name))
     return out
 
 
@@ -206,7 +206,7 @@ def _sync_project_wps(
             graph,
             type_name="work_package",
             node_id=wid,
-            title=wp.slug,
+            title=wp.title,
         )
         if isinstance(created, Err):
             return created
