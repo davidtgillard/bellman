@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -13,6 +14,7 @@ from bellman._version import version_string
 from bellman.errors import BellmanLayoutError
 from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 from bellman.plugin.cli import register_plugin_command
+from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
 from bellman.roadmap import load
 from bellman.update import maybe_notify_update, run_update_command
 from bellman.validate import validate_roadmap
@@ -84,6 +86,9 @@ def init(
 
 create_app = typer.Typer(help="Create roadmap entities.")
 app.add_typer(create_app, name="create")
+
+report_app = typer.Typer(help="Export roadmap reports.")
+app.add_typer(report_app, name="report")
 
 
 @create_app.command("initiative")
@@ -185,6 +190,47 @@ def promote(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     _apply_graph_sync(root)
+
+
+@report_app.command("wbs")
+def report_wbs(
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Roadmap root directory (default: cwd)"),
+    ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option("--project", help="Export a single project by name"),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "-o",
+            "--output",
+            help="Output CSV file path (default: stdout)",
+        ),
+    ] = None,
+) -> None:
+    """Export a work-breakdown-structure CSV for roadmap work packages."""
+    root = layout.roadmap_root(path)
+    try:
+        roadmap = load(root)
+    except (ValueError, OSError) as exc:
+        typer.echo(f"load error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        if output is None:
+            write_wbs_csv(roadmap, sys.stdout, project_name=project)
+            return
+
+        out_path = output if output.is_absolute() else root / output
+        write_wbs_csv_file(roadmap, out_path, project_name=project)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Wrote {out_path}")
 
 
 @app.command()

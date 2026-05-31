@@ -119,7 +119,10 @@ def _parse_dependency_item(raw: Any, path: str, slug: str) -> PrecedenceEdge:
     if isinstance(raw, str):
         match = _DEPENDENCY_RE.match(raw.strip())
         if match is None:
-            msg = f"invalid dependency syntax for work package {slug!r} in {path}: {raw!r}"
+            msg = (
+                f"invalid dependency syntax for work package {slug!r} "
+                f"in {path}: {raw!r}"
+            )
             raise ValueError(msg)
         return PrecedenceEdge(
             predecessor=match.group("predecessor"),
