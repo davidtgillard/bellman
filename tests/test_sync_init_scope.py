@@ -10,9 +10,9 @@ import pytest
 from pyfits.result import Err, Ok
 from typer.testing import CliRunner
 
-from snark import layout
-from snark.cli import app
-from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman import layout
+from bellman.cli import app
+from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 runner = CliRunner()
@@ -20,7 +20,7 @@ runner = CliRunner()
 
 def test_sync_roadmap_requires_init(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    with patch("snark.graph.sync.libfits_available", return_value=True):
+    with patch("bellman.graph.sync.libfits_available", return_value=True):
         result = sync_roadmap(tmp_path)
     assert isinstance(result, Err)
     assert result.err_value.code == "not_initialized"
@@ -60,10 +60,10 @@ def test_validate_from_subfolder_uses_parent_fits(
 
 def test_validate_without_init_does_not_create_fits(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    with patch("snark.cli.libfits_available", return_value=True):
+    with patch("bellman.cli.libfits_available", return_value=True):
         result = runner.invoke(app, ["validate", str(tmp_path)])
     assert result.exit_code == 1
-    assert "no initialized snark roadmap" in result.output
+    assert "no initialized bellman roadmap" in result.output
     assert not (tmp_path / ".fits").exists()
 
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from snark.roadmap import load
-from snark.validate import validate_roadmap
+from bellman.roadmap import load
+from bellman.validate import validate_roadmap
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 

@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from snark.cli import app
-from snark.plugin.loader import load_plugin_or_raise
+from bellman.cli import app
+from bellman.plugin.loader import load_plugin_or_raise
 
 runner = CliRunner()
 
@@ -21,24 +21,24 @@ def _write_echo_plugin(root: Path) -> None:
     (plugin_dir / "__init__.py").write_text(
         textwrap.dedent(
             """
-            from snark.plugin import (
+            from bellman.plugin import (
                 FlagSpec,
                 PluginArgumentSpecs,
-                SnarkContext,
-                SnarkPlugin,
+                BellmanContext,
+                BellmanPlugin,
                 PluginArguments,
                 TextIO,
             )
 
-            def _run(ctx: SnarkContext, args: PluginArguments, io: TextIO) -> int:
+            def _run(ctx: BellmanContext, args: PluginArguments, io: TextIO) -> int:
                 io.writeline("echo")
                 if args.verbose:
-                    io.writeline(ctx.snark_version)
+                    io.writeline(ctx.bellman_version)
                 renames = ctx.history().renames
                 io.writeline(f"renames:{len(renames)}")
                 return 0
 
-            PLUGIN = SnarkPlugin(
+            PLUGIN = BellmanPlugin(
                 name="echo",
                 summary="Echo test plugin",
                 args=PluginArgumentSpecs([FlagSpec("--verbose", help="Show version")]),
@@ -114,10 +114,10 @@ def test_load_plugin_name_mismatch(tmp_path: Path) -> None:
     (plugin_dir / "__init__.py").write_text(
         textwrap.dedent(
             """
-            from snark.plugin import (
+            from bellman.plugin import (
                 PluginArgumentSpecs,
-                SnarkPlugin,
-                SnarkContext,
+                BellmanPlugin,
+                BellmanContext,
                 PluginArguments,
                 TextIO,
             )
@@ -125,7 +125,7 @@ def test_load_plugin_name_mismatch(tmp_path: Path) -> None:
             def _run(ctx, args, io):
                 return 0
 
-            PLUGIN = SnarkPlugin(
+            PLUGIN = BellmanPlugin(
                 name="other",
                 summary="x",
                 args=PluginArgumentSpecs.empty(),
@@ -136,7 +136,7 @@ def test_load_plugin_name_mismatch(tmp_path: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    from snark.plugin.loader import PluginLoadError
+    from bellman.plugin.loader import PluginLoadError
 
     with pytest.raises(PluginLoadError, match="does not match"):
         load_plugin_or_raise(tmp_path, "bad")

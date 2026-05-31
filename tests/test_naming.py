@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from snark.naming import normalize_entity_name, slugify, validate_kebab
+from bellman.naming import normalize_entity_name, slugify, validate_kebab
 
 
 def test_validate_kebab_accepts_valid() -> None:

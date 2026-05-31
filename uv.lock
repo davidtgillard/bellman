@@ -1085,7 +1085,7 @@ wheels = [
 ]
 
 [[package]]
-name = "snark"
+name = "bellman"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

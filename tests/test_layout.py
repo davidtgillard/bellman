@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from snark import layout
-from snark.errors import SnarkLayoutError
+from bellman import layout
+from bellman.errors import BellmanLayoutError
 
 
 def test_find_roadmap_root_from_subfolder(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_find_roadmap_root_stops_at_git_root(tmp_path: Path) -> None:
 
 
 def test_discover_roadmap_root_raises_when_missing(tmp_path: Path) -> None:
-    with pytest.raises(SnarkLayoutError, match="no initialized snark roadmap"):
+    with pytest.raises(BellmanLayoutError, match="no initialized bellman roadmap"):
         layout.discover_roadmap_root(tmp_path)
 
 
@@ -57,5 +57,5 @@ def test_promote_initiative(tmp_path: Path) -> None:
 
 
 def test_create_project_rejects_md_suffix(tmp_path: Path) -> None:
-    with pytest.raises(SnarkLayoutError, match="cannot be created"):
+    with pytest.raises(BellmanLayoutError, match="cannot be created"):
         layout.create_project(tmp_path, "foo.md")

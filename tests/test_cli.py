@@ -7,7 +7,7 @@ from pathlib import Path
 import semver
 from typer.testing import CliRunner
 
-from snark.cli import app
+from bellman.cli import app
 
 runner = CliRunner()
 

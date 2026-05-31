@@ -9,7 +9,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout snark
+      - name: Checkout bellman
         uses: actions/checkout@v4
 
       - name: Install uv

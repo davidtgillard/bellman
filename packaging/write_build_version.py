@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write src/snark/_build_version.py from pyproject.toml version."""
+"""Write src/bellman/_build_version.py from pyproject.toml version."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def main() -> None:
     pyproject = root / "pyproject.toml"
     with pyproject.open("rb") as f:
         version = tomllib.load(f)["project"]["version"]
-    out = root / "src" / "snark" / "_build_version.py"
+    out = root / "src" / "bellman" / "_build_version.py"
     header = (
         '"""Embedded version for PyInstaller builds '
         '(overwritten at release build time)."""\n\n'

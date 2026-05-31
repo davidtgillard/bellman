@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from snark.model import UNKNOWN_ESTIMATE, ThreePointEstimate
-from snark.parse.dependencies import parse_dependencies_section
-from snark.parse.work_packages import _parse_estimate, parse_work_packages
-from snark.roadmap import load
+from bellman.model import UNKNOWN_ESTIMATE, ThreePointEstimate
+from bellman.parse.dependencies import parse_dependencies_section
+from bellman.parse.work_packages import _parse_estimate, parse_work_packages
+from bellman.roadmap import load
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 

@@ -9,7 +9,7 @@ from pyfits.errors import FitsError
 from pyfits.result import Err, Ok
 from typer.testing import CliRunner
 
-from snark.cli import app
+from bellman.cli import app
 
 runner = CliRunner()
 
@@ -27,8 +27,8 @@ def test_create_initiative_calls_sync(tmp_path: Path) -> None:
         return Ok(None)
 
     with (
-        patch("snark.cli.libfits_available", return_value=True),
-        patch("snark.cli.sync_roadmap", side_effect=fake_sync),
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch("bellman.cli.sync_roadmap", side_effect=fake_sync),
     ):
         result = runner.invoke(
             app,
@@ -42,9 +42,9 @@ def test_create_initiative_calls_sync(tmp_path: Path) -> None:
 def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     with (
-        patch("snark.cli.libfits_available", return_value=True),
+        patch("bellman.cli.libfits_available", return_value=True),
         patch(
-            "snark.cli.sync_roadmap",
+            "bellman.cli.sync_roadmap",
             return_value=Err(FitsError("boom", code="test")),
         ),
     ):
@@ -69,8 +69,8 @@ def test_delete_calls_sync_with_prune(tmp_path: Path) -> None:
         return Ok(None)
 
     with (
-        patch("snark.cli.libfits_available", return_value=True),
-        patch("snark.cli.sync_roadmap", side_effect=fake_sync),
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch("bellman.cli.sync_roadmap", side_effect=fake_sync),
     ):
         result = runner.invoke(
             app,
@@ -82,7 +82,7 @@ def test_delete_calls_sync_with_prune(tmp_path: Path) -> None:
 
 def test_create_without_libfits_skips_sync(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    with patch("snark.cli.libfits_available", return_value=False):
+    with patch("bellman.cli.libfits_available", return_value=False):
         result = runner.invoke(
             app,
             ["create", "initiative", "my-init", "--path", str(tmp_path)],

@@ -1,5 +1,5 @@
 [project]
-name = "snark"
+name = "bellman"
 version = "0.1.0"
 description = "Markdown-first roadmap planning built on pyfits"
 readme = "README.md"
@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-snark = "snark.cli:app"
+bellman = "bellman.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
@@ -59,13 +59,13 @@ markers = [
     "integration: requires libfits (pyfits native library)",
 ]
 addopts = [
-    "--cov=snark",
+    "--cov=bellman",
     "--cov-report=term-missing",
 ]
 
 [tool.coverage.run]
 branch = true
-source = ["snark"]
+source = ["bellman"]
 
 [tool.mypy]
 python_version = "3.12"

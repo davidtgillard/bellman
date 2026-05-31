@@ -6,7 +6,7 @@ from pyfits import Id
 from pyfits.errors import FitsError, FitsStatus
 from pyfits.result import Err, Ok
 
-from snark.graph.fits_errors import (
+from bellman.graph.fits_errors import (
     ignore_duplicate_instance,
     ignore_if_already_exists,
     is_already_exists,

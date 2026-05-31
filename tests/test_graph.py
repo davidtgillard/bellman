@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from pyfits.result import Ok
 
-from snark.graph.link_naming import display_name, precedes_link_type
-from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
-from snark.model import Hardness, RelationType
+from bellman.graph.link_naming import display_name, precedes_link_type
+from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman.model import Hardness, RelationType
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 

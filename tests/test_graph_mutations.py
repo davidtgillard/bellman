@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from pyfits.result import Err, Ok
 
-from snark import layout
-from snark.graph.history import load_graph_history
-from snark.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman import layout
+from bellman.graph.history import load_graph_history
+from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 
 
 def _instance_type(root: Path, instance_id: str) -> str | None:

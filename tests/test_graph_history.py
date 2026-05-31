@@ -8,12 +8,12 @@ from unittest.mock import patch
 
 from pyfits.result import Err, Ok
 
-from snark.graph.history import (
+from bellman.graph.history import (
     GraphHistory,
     InstanceRename,
     load_graph_history,
 )
-from snark.plugin.context import SnarkContext
+from bellman.plugin.context import BellmanContext
 
 
 def _write_registry(root: Path, payload: dict) -> None:
@@ -84,7 +84,7 @@ def test_load_graph_history_renames_and_tombstones(tmp_path: Path) -> None:
     assert history.instances[0].instance_id == "live"
 
 
-def test_snark_context_history_lazy_no_repo(tmp_path: Path) -> None:
+def test_bellman_context_history_lazy_no_repo(tmp_path: Path) -> None:
     _write_registry(
         tmp_path,
         {
@@ -95,8 +95,8 @@ def test_snark_context_history_lazy_no_repo(tmp_path: Path) -> None:
             "link_types": [],
         },
     )
-    ctx = SnarkContext(root=tmp_path)
-    with patch("snark.plugin.context.Repo.open") as open_mock:
+    ctx = BellmanContext(root=tmp_path)
+    with patch("bellman.plugin.context.Repo.open") as open_mock:
         history = ctx.history()
         open_mock.assert_not_called()
     assert isinstance(history, GraphHistory)

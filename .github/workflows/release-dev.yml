@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout snark
+      - name: Checkout bellman
         uses: actions/checkout@v4
 
       - name: Install uv
@@ -36,21 +36,21 @@ jobs:
           echo "LIBFITS_PATH=${libfits}" >> "${GITHUB_ENV}"
 
       - name: Build PyInstaller binary
-        run: uv run pyinstaller packaging/snark.spec --noconfirm
+        run: uv run pyinstaller packaging/bellman.spec --noconfirm
 
       - name: Package release artifacts
         run: |
           set -euo pipefail
           version="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
           mkdir -p dist/release
-          cp dist/snark "dist/release/snark-${version}-linux-x86_64"
-          chmod +x "dist/release/snark-${version}-linux-x86_64"
-          (cd dist/release && sha256sum "snark-${version}-linux-x86_64" > "snark-${version}-linux-x86_64.sha256")
+          cp dist/bellman "dist/release/bellman-${version}-linux-x86_64"
+          chmod +x "dist/release/bellman-${version}-linux-x86_64"
+          (cd dist/release && sha256sum "bellman-${version}-linux-x86_64" > "bellman-${version}-linux-x86_64.sha256")
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: snark-binary
+          name: bellman-binary
           path: dist/release/*
 
   publish-dev-release:
@@ -63,7 +63,7 @@ jobs:
       - name: Download binary artifacts
         uses: actions/download-artifact@v4
         with:
-          name: snark-binary
+          name: bellman-binary
           path: release
 
       - name: Ensure dev release exists
@@ -74,7 +74,7 @@ jobs:
           gh release create dev \
             --repo "$GITHUB_REPOSITORY" \
             --title "Development binaries" \
-            --notes "Rolling development PyInstaller binaries for snark (linux-x86_64)." \
+            --notes "Rolling development PyInstaller binaries for bellman (linux-x86_64)." \
             --prerelease
 
       - name: Remove existing dev assets
