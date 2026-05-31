@@ -77,6 +77,7 @@ bellman update --check
 bellman delete my-goal
 bellman plugin list
 bellman plugin my-plugin
+bellman report wbs tree --project billing-redesign   # PERT tree to stdout
 ```
 
 `validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.

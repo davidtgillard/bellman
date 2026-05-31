@@ -38,6 +38,31 @@ def _format_duration(amount: float, unit: str) -> str:
     return f"{text}{unit}"
 
 
+def pert_numeric(estimate: ThreePointEstimate) -> float:
+    """Return the PERT expected duration for a three-point estimate.
+
+    Args:
+        estimate: Optimistic, likely, and pessimistic durations with a unit.
+
+    Returns:
+        PERT value in the estimate's unit: ``(O + 4M + P) / 6``.
+    """
+    return (estimate.optimistic + 4 * estimate.most_likely + estimate.pessimistic) / 6
+
+
+def format_pert(value: float, unit: str) -> str:
+    """Format a PERT duration for display.
+
+    Args:
+        value: PERT duration in ``unit``.
+        unit: Suffix letter (``h``, ``d``, or ``w``).
+
+    Returns:
+        Human-readable duration string (e.g. ``2.17w``).
+    """
+    return _format_duration(value, unit)
+
+
 def _estimate_columns(estimate: Estimate | None) -> tuple[str, str, str, str]:
     """Return worst, expected, best, and PERT estimate strings for a row."""
     if estimate is None or isinstance(estimate, UnknownEstimate):
@@ -47,10 +72,7 @@ def _estimate_columns(estimate: Estimate | None) -> tuple[str, str, str, str]:
     worst = _format_duration(estimate.pessimistic, unit)
     expected = _format_duration(estimate.most_likely, unit)
     best = _format_duration(estimate.optimistic, unit)
-    pert_value = (
-        estimate.optimistic + 4 * estimate.most_likely + estimate.pessimistic
-    ) / 6
-    pert = _format_duration(pert_value, unit)
+    pert = format_pert(pert_numeric(estimate), unit)
     return (worst, expected, best, pert)
 
 

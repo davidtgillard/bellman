@@ -126,7 +126,7 @@ def test_wbs_pert_uses_three_point_formula() -> None:
 def test_report_wbs_cli_writes_file(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
-        ["report", "wbs", str(EXAMPLES), "-o", str(tmp_path / "out.csv")],
+        ["report", "wbs", "-o", str(tmp_path / "out.csv"), str(EXAMPLES)],
     )
     assert result.exit_code == 0
     assert "Wrote" in result.stdout
@@ -141,11 +141,11 @@ def test_report_wbs_cli_unknown_project(tmp_path: Path) -> None:
         [
             "report",
             "wbs",
-            str(EXAMPLES),
             "--project",
             "missing-project",
             "-o",
             str(tmp_path / "out.csv"),
+            str(EXAMPLES),
         ],
     )
     assert result.exit_code == 1

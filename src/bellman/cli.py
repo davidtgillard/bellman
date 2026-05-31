@@ -20,6 +20,7 @@ from bellman.graph.delta import (
 from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 from bellman.plugin.cli import register_plugin_command
 from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
+from bellman.report.wbs_tree import write_wbs_tree
 from bellman.roadmap import load
 from bellman.update import maybe_notify_update, run_update_command
 from bellman.validate import ValidationResult, validate_roadmap
@@ -252,8 +253,13 @@ def promote(
     _apply_graph_sync(root)
 
 
-@report_app.command("wbs")
+wbs_app = typer.Typer(help="Work-breakdown-structure reports.")
+report_app.add_typer(wbs_app, name="wbs")
+
+
+@wbs_app.callback(invoke_without_command=True)
 def report_wbs(
+    ctx: typer.Context,
     path: Annotated[
         Path | None,
         typer.Argument(help="Roadmap root directory (default: cwd)"),
@@ -272,6 +278,11 @@ def report_wbs(
     ] = None,
 ) -> None:
     """Export a work-breakdown-structure CSV for roadmap work packages."""
+    ctx.ensure_object(dict)
+    ctx.obj["path"] = path
+    if ctx.invoked_subcommand is not None:
+        return
+
     root = layout.roadmap_root(path)
     try:
         roadmap = load(root)
@@ -291,6 +302,34 @@ def report_wbs(
         raise typer.Exit(code=1) from exc
 
     typer.echo(f"Wrote {out_path}")
+
+
+@wbs_app.command("tree")
+def report_wbs_tree(
+    ctx: typer.Context,
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Roadmap root directory (default: cwd)"),
+    ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option("--project", help="Show a single project by name"),
+    ] = None,
+) -> None:
+    """Print a work-package tree with PERT estimates to stdout."""
+    group_path = ctx.obj.get("path") if ctx.obj else None
+    root = layout.roadmap_root(path if path is not None else group_path)
+    try:
+        roadmap = load(root)
+    except (ValueError, OSError) as exc:
+        typer.echo(f"load error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        write_wbs_tree(roadmap, sys.stdout, project_name=project)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
