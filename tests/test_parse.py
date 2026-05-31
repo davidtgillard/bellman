@@ -88,6 +88,30 @@ def test_parse_estimate_requires_suffix() -> None:
         _parse_estimate_value(raw, "path", "wp")
 
 
+def test_parse_estimate_allows_equal_values() -> None:
+    raw = {
+        "optimistic": "2w",
+        "most_likely": "2w",
+        "pessimistic": "2w",
+    }
+    est = _parse_estimate_value(raw, "path", "wp")
+    assert isinstance(est, ThreePointEstimate)
+    assert est.optimistic == est.most_likely == est.pessimistic == 2.0
+
+
+def test_parse_estimate_rejects_out_of_order_values() -> None:
+    raw = {
+        "optimistic": "7w",
+        "most_likely": "2w",
+        "pessimistic": "1w",
+    }
+    with pytest.raises(
+        ValueError,
+        match="optimistic <= most_likely <= pessimistic",
+    ):
+        _parse_estimate_value(raw, "path", "wp")
+
+
 def test_parse_partial_estimate_fails() -> None:
     raw = {"optimistic": "1w", "most_likely": "2w"}
     with pytest.raises(ValueError, match="incomplete estimate"):

@@ -98,10 +98,19 @@ def _parse_estimate_value(raw: Any, path: str, slug: str) -> Estimate:
         )
         raise ValueError(msg)
     unit = units.pop()
+    optimistic = values["optimistic"]
+    most_likely = values["most_likely"]
+    pessimistic = values["pessimistic"]
+    if not optimistic <= most_likely <= pessimistic:
+        msg = (
+            f"estimate must satisfy optimistic <= most_likely <= pessimistic "
+            f"for work package {slug!r} in {path}"
+        )
+        raise ValueError(msg)
     return ThreePointEstimate(
-        optimistic=values["optimistic"],
-        most_likely=values["most_likely"],
-        pessimistic=values["pessimistic"],
+        optimistic=optimistic,
+        most_likely=most_likely,
+        pessimistic=pessimistic,
         unit=unit,  # type: ignore[arg-type]
     )
 
