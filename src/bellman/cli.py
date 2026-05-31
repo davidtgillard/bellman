@@ -18,10 +18,11 @@ from bellman.graph.delta import (
     compute_registry_delta,
 )
 from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman.model import Roadmap
 from bellman.plugin.cli import register_plugin_command
 from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
 from bellman.report.wbs_tree import write_wbs_tree
-from bellman.roadmap import load
+from bellman.roadmap import load, load_for_validation
 from bellman.update import maybe_notify_update, run_update_command
 from bellman.validate import ValidationResult, validate_roadmap
 
@@ -58,19 +59,25 @@ def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
     typer.echo("Graph sync passed.")
 
 
-def _load_roadmap(root: Path):
-    try:
-        return load(root)
-    except (ValueError, OSError) as exc:
-        typer.echo(f"load error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+def _markdown_validation_result(root: Path) -> tuple[ValidationResult, Roadmap]:
+    load_result = load_for_validation(root)
+    validation = validate_roadmap(load_result.roadmap)
+    return ValidationResult(
+        errors=load_result.errors + validation.errors,
+        warnings=validation.warnings,
+    ), load_result.roadmap
 
 
-def _emit_validation_result(result: ValidationResult) -> None:
+def _emit_validation_result(result: ValidationResult) -> bool:
+    """Emit markdown validation messages.
+
+    Returns:
+        True when validation errors were reported.
+    """
     if result.errors:
         for err in result.errors:
             typer.echo(err.format(), err=True)
-        raise typer.Exit(code=1)
+        return True
 
     for warn in result.warnings:
         typer.echo(f"warning: {warn.format()}", err=True)
@@ -80,6 +87,7 @@ def _emit_validation_result(result: ValidationResult) -> None:
         typer.echo(f"Markdown validation passed with {count} warning(s).")
     else:
         typer.echo("Markdown validation passed.")
+    return False
 
 
 def _emit_registry_deltas(delta: RegistryDelta) -> None:
@@ -348,11 +356,12 @@ def validate(
 ) -> None:
     """Validate roadmap markdown and compare the registry to git."""
     root = _root(path)
-    roadmap = _load_roadmap(root)
-    result = validate_roadmap(roadmap)
-    _emit_validation_result(result)
+    result, roadmap = _markdown_validation_result(root)
+    markdown_failed = _emit_validation_result(result)
 
     if not registry:
+        if markdown_failed:
+            raise typer.Exit(code=1)
         return
 
     if not libfits_available():
@@ -360,6 +369,8 @@ def validate(
             "Skipping registry delta check: libfits not available.",
             err=True,
         )
+        if markdown_failed:
+            raise typer.Exit(code=1)
         return
 
     delta_result = compute_registry_delta(root, roadmap)
@@ -369,6 +380,9 @@ def validate(
         typer.echo(f"Registry delta check failed: {message}", err=True)
         raise typer.Exit(code=1)
     _emit_registry_deltas(delta_result.ok_value)
+
+    if markdown_failed:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -380,9 +394,9 @@ def sync(
 ) -> None:
     """Sync git markdown into the pyfits registry after validation passes."""
     root = _root(path)
-    roadmap = _load_roadmap(root)
-    result = validate_roadmap(roadmap)
-    _emit_validation_result(result)
+    result, _roadmap = _markdown_validation_result(root)
+    if _emit_validation_result(result):
+        raise typer.Exit(code=1)
 
     if not libfits_available():
         typer.echo("Graph sync failed: libfits not available.", err=True)

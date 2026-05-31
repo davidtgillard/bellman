@@ -19,6 +19,29 @@ def _write_fits_marker(root: Path) -> None:
     (root / ".fits").mkdir()
 
 
+def test_validate_reports_all_load_errors(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    goals = tmp_path / "goals"
+    goals.mkdir(parents=True)
+    (goals / "bad-a.md").write_text("no header\n", encoding="utf-8")
+    (goals / "bad-b.md").write_text("also no header\n", encoding="utf-8")
+    result = runner.invoke(app, ["validate", "--no-registry", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "bad-a.md" in result.output
+    assert "bad-b.md" in result.output
+
+
+def test_validate_reports_all_validation_errors(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    goals = tmp_path / "goals"
+    goals.mkdir(parents=True)
+    (goals / "bad-one.md").write_text("# Wrong One\n\nContent.\n", encoding="utf-8")
+    (goals / "bad-two.md").write_text("# Wrong Two\n\nContent.\n", encoding="utf-8")
+    result = runner.invoke(app, ["validate", "--no-registry", str(tmp_path)])
+    assert result.exit_code == 1
+    assert result.output.count("does not match name") == 2
+
+
 def test_validate_does_not_sync(tmp_path: Path) -> None:
     from bellman import layout
 
