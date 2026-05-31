@@ -5,7 +5,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from snark.model import PrecedenceEdge, ThreePointEstimate, WorkPackage
+from snark.model import (
+    UNKNOWN_ESTIMATE,
+    Estimate,
+    PrecedenceEdge,
+    ThreePointEstimate,
+    WorkPackage,
+)
 from snark.naming import slugify, validate_kebab
 from snark.parse._sections import Section, split_sections, subsections
 from snark.parse.dependencies import parse_dependencies_section
@@ -16,16 +22,39 @@ _ESTIMATE_RE = re.compile(
 )
 
 
-def _parse_estimate(body: str, path: str, slug: str) -> ThreePointEstimate | None:
-    if not body.strip():
+def _invalid_estimate_msg(slug: str, path: str) -> str:
+    return (
+        f"estimate must be unknown or a complete 3-point estimate "
+        f"for work package {slug!r} in {path}"
+    )
+
+
+def _parse_estimate(body: str, path: str, slug: str) -> Estimate | None:
+    stripped = body.strip()
+    if not stripped:
         return None
+    if stripped.lower() == "unknown":
+        return UNKNOWN_ESTIMATE
     values: dict[str, str] = {}
+    matched_any = False
     for line in body.splitlines():
         match = _ESTIMATE_RE.match(line)
         if match is None:
+            if line.strip():
+                raise ValueError(_invalid_estimate_msg(slug, path))
             continue
+        matched_any = True
         key = match.group(1).lower().replace(" ", "_")
-        values[key] = match.group(2).strip()
+        raw = match.group(2).strip()
+        if raw.lower() == "unknown":
+            msg = (
+                f"partial estimate with unknown values is not supported "
+                f"for work package {slug!r} in {path}"
+            )
+            raise ValueError(msg)
+        values[key] = raw
+    if not matched_any:
+        raise ValueError(_invalid_estimate_msg(slug, path))
     required = ("optimistic", "most_likely", "pessimistic", "unit")
     if not all(k in values for k in required):
         msg = f"incomplete estimate for work package {slug!r} in {path}"
@@ -60,7 +89,7 @@ def _parse_wp_tree(
     child_headers = subsections(section, all_sections)
     # Description: text before first ### subsection
     description = section.body
-    estimate: ThreePointEstimate | None = None
+    estimate: Estimate | None = None
     dep_edges: tuple[PrecedenceEdge, ...] = ()
     children: list[WorkPackage] = []
 

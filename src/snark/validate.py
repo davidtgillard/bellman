@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 
-from snark.errors import SnarkError
-from snark.model import Hardness, PrecedenceEdge, Roadmap, WorkPackage
+from snark.errors import SnarkError, SnarkWarning
+from snark.model import Hardness, PrecedenceEdge, Roadmap, UnknownEstimate, WorkPackage
 from snark.naming import slugify
 
 
@@ -90,9 +91,18 @@ def _resolve_ref(
     return False
 
 
-def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
-    """Validate a loaded roadmap; return all errors."""
+@dataclass(frozen=True, slots=True)
+class ValidationResult:
+    """Outcome of roadmap validation."""
+
+    errors: tuple[SnarkError, ...]
+    warnings: tuple[SnarkWarning, ...]
+
+
+def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
+    """Validate a loaded roadmap; return errors and warnings."""
     errors: list[SnarkError] = []
+    warnings: list[SnarkWarning] = []
 
     active_names = {i.name for i in roadmap.initiatives}
     project_names = {p.name for p in roadmap.projects}
@@ -131,6 +141,13 @@ def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
                     SnarkError(
                         layout_wp_path(roadmap, project.name, wp.slug),
                         f"work package {wp.slug!r} missing estimate",
+                    )
+                )
+            elif isinstance(wp.estimate, UnknownEstimate):
+                warnings.append(
+                    SnarkWarning(
+                        layout_wp_path(roadmap, project.name, wp.slug),
+                        f"work package {wp.slug!r} has unknown estimate",
                     )
                 )
 
@@ -209,7 +226,10 @@ def validate_roadmap(roadmap: Roadmap) -> list[SnarkError]:
         if not goal.description.strip():
             errors.append(SnarkError(goal.path, "goal missing content beneath header"))
 
-    return errors
+    return ValidationResult(
+        errors=tuple(errors),
+        warnings=tuple(warnings),
+    )
 
 
 def layout_wp_path(roadmap: Roadmap, project_name: str, slug: str) -> str:

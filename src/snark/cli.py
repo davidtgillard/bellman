@@ -210,13 +210,20 @@ def validate(
         typer.echo(f"load error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
-    errors = validate_roadmap(roadmap)
-    if errors:
-        for err in errors:
+    result = validate_roadmap(roadmap)
+    if result.errors:
+        for err in result.errors:
             typer.echo(err.format(), err=True)
         raise typer.Exit(code=1)
 
-    typer.echo("Markdown validation passed.")
+    for warn in result.warnings:
+        typer.echo(f"warning: {warn.format()}", err=True)
+
+    if result.warnings:
+        count = len(result.warnings)
+        typer.echo(f"Markdown validation passed with {count} warning(s).")
+    else:
+        typer.echo("Markdown validation passed.")
 
     if sync:
         if not libfits_available():

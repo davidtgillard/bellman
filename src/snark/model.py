@@ -45,6 +45,17 @@ class ThreePointEstimate:
 
 
 @dataclass(frozen=True, slots=True)
+class UnknownEstimate:
+    """Placeholder when duration has not been determined."""
+
+
+UNKNOWN_ESTIMATE = UnknownEstimate()
+
+Estimate = ThreePointEstimate | UnknownEstimate
+"""Work-package duration: a full 3-point estimate or explicitly unknown."""
+
+
+@dataclass(frozen=True, slots=True)
 class WorkScope:
     """Shared fields for initiatives and projects."""
 
@@ -76,7 +87,7 @@ class WorkPackage:
 
     slug: str
     description: str
-    estimate: ThreePointEstimate | None
+    estimate: Estimate | None
     children: tuple[WorkPackage, ...] = ()
     dependencies: tuple[PrecedenceEdge, ...] = ()
 
