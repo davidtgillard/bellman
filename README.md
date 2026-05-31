@@ -70,6 +70,8 @@ bellman create milestone ga-release
 bellman create goal reduce-churn
 bellman promote billing-redesign   # after creating as initiative
 bellman validate .
+bellman validate --no-registry .
+bellman sync .
 bellman version
 bellman update --check
 bellman delete my-goal
@@ -77,7 +79,9 @@ bellman plugin list
 bellman plugin my-plugin
 ```
 
-`create`, `delete`, and `promote` update the pyfits graph and `.fits/registry.json` when libfits is installed (same sync as `validate --sync`). Run `bellman init` first; `validate --sync` will not bootstrap pyfits artifacts. If graph sync fails after the markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` prunes removed entities from the graph; use `bellman validate --prune` to prune stale objects after other edits.
+`validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
+
+`create`, `delete`, and `promote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
 
 ## Plugins
 

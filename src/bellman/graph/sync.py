@@ -12,10 +12,20 @@ from pyfits.result import Err, Ok, Result
 
 from bellman import layout
 from bellman.graph import link_naming
+from bellman.graph.desired import (
+    desired_node_ids,
+    flatten_wps,
+    goal_node_id,
+    milestone_node_id,
+    resolve_scope_ref,
+    resolve_wp_ref,
+    scope_node_id,
+    wp_node_id,
+)
 from bellman.graph.fits_errors import ignore_duplicate_instance, ignore_duplicate_link
 from bellman.graph.history import load_graph_history
 from bellman.graph.registry import bootstrap_registry
-from bellman.model import Initiative, Project, Roadmap, WorkPackage
+from bellman.model import Initiative, Project, Roadmap
 from bellman.roadmap import load
 
 
@@ -25,20 +35,19 @@ def libfits_available() -> bool:
 
 
 def _scope_node_id(scope: Initiative | Project) -> Id:
-    """Flat node id (opaque target_id); type is in the registry."""
-    return Id(scope.name)
+    return Id(scope_node_id(scope))
 
 
 def _wp_node_id(project_name: str, slug: str) -> Id:
-    return Id(f"{project_name}--{slug}")
+    return Id(wp_node_id(project_name, slug))
 
 
 def _milestone_node_id(name: str) -> Id:
-    return Id(name)
+    return Id(milestone_node_id(name))
 
 
 def _goal_node_id(name: str) -> Id:
-    return Id(name)
+    return Id(goal_node_id(name))
 
 
 def _graph_node_ids(graph: Graph) -> set[str]:
@@ -52,21 +61,7 @@ def _reload_graph(repo: Repo) -> Result[Graph, FitsError]:
 
 def _desired_graph_node_ids(roadmap: Roadmap) -> set[str]:
     """Opaque node ids that should exist after a full roadmap sync."""
-    desired: set[str] = set()
-    for initiative in roadmap.initiatives:
-        desired.add(_scope_node_id(initiative).value)
-    for archived in roadmap.archived_initiatives:
-        if roadmap.project_by_name(archived.name) is None:
-            desired.add(_scope_node_id(archived).value)
-    for project in roadmap.projects:
-        desired.add(_scope_node_id(project).value)
-        for wp, _ in _flatten_wps(project.work_packages, None, project.name):
-            desired.add(_wp_node_id(project.name, wp.slug).value)
-    for milestone in roadmap.milestones:
-        desired.add(_milestone_node_id(milestone.name).value)
-    for goal in roadmap.goals:
-        desired.add(_goal_node_id(goal.name).value)
-    return desired
+    return desired_node_ids(roadmap)
 
 
 def _prune_stale_registry(
@@ -177,20 +172,7 @@ def _ensure_link(
 
 
 def _resolve_wp_ref(project_name: str, ref: str) -> Id:
-    slug = ref.split("/", 1)[-1] if "/" in ref else ref
-    return _wp_node_id(project_name, slug)
-
-
-def _flatten_wps(
-    packages: tuple[WorkPackage, ...],
-    parent: WorkPackage | None,
-    project_name: str,
-) -> list[tuple[WorkPackage, WorkPackage | None]]:
-    out: list[tuple[WorkPackage, WorkPackage | None]] = []
-    for wp in packages:
-        out.append((wp, parent))
-        out.extend(_flatten_wps(wp.sub_packages, wp, project_name))
-    return out
+    return Id(resolve_wp_ref(project_name, ref))
 
 
 def _sync_project_wps(
@@ -198,7 +180,7 @@ def _sync_project_wps(
     graph: Graph,
     project: Project,
 ) -> Result[None, FitsError]:
-    flat = _flatten_wps(project.work_packages, None, project.name)
+    flat = flatten_wps(project.work_packages, None, project.name)
     for wp, parent in flat:
         wid = _wp_node_id(project.name, wp.slug)
         created = _ensure_node(
@@ -250,16 +232,7 @@ def _sync_scope_dependencies(
     sid = _scope_node_id(scope)
 
     def resolve_scope(ref: str) -> Id:
-        proj = roadmap.project_by_name(ref)
-        if proj is not None:
-            return _scope_node_id(proj)
-        for initiative in roadmap.initiatives:
-            if initiative.name == ref:
-                return _scope_node_id(initiative)
-        for archived in roadmap.archived_initiatives:
-            if archived.name == ref and roadmap.project_by_name(ref) is None:
-                return _scope_node_id(archived)
-        return Id(ref)
+        return Id(resolve_scope_ref(roadmap, ref))
 
     for edge in scope.dependencies:
         pred = resolve_scope(edge.predecessor)

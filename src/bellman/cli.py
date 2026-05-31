@@ -12,12 +12,17 @@ from pyfits.result import Err
 from bellman import layout
 from bellman._version import version_string
 from bellman.errors import BellmanLayoutError
+from bellman.graph.delta import (
+    RegistryDelta,
+    RegistryDeltaError,
+    compute_registry_delta,
+)
 from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 from bellman.plugin.cli import register_plugin_command
 from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
 from bellman.roadmap import load
 from bellman.update import maybe_notify_update, run_update_command
-from bellman.validate import validate_roadmap
+from bellman.validate import ValidationResult, validate_roadmap
 
 app = typer.Typer(
     name="bellman",
@@ -52,6 +57,61 @@ def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
     typer.echo("Graph sync passed.")
 
 
+def _load_roadmap(root: Path):
+    try:
+        return load(root)
+    except (ValueError, OSError) as exc:
+        typer.echo(f"load error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _emit_validation_result(result: ValidationResult) -> None:
+    if result.errors:
+        for err in result.errors:
+            typer.echo(err.format(), err=True)
+        raise typer.Exit(code=1)
+
+    for warn in result.warnings:
+        typer.echo(f"warning: {warn.format()}", err=True)
+
+    if result.warnings:
+        count = len(result.warnings)
+        typer.echo(f"Markdown validation passed with {count} warning(s).")
+    else:
+        typer.echo("Markdown validation passed.")
+
+
+def _emit_registry_deltas(delta: RegistryDelta) -> None:
+    for node in delta.missing_nodes:
+        typer.echo(
+            f"registry delta: missing node {node} (present in git)",
+            err=True,
+        )
+    for node in delta.extra_nodes:
+        typer.echo(
+            f"registry delta: extra node {node} (not in git)",
+            err=True,
+        )
+    for link in delta.missing_links:
+        typer.echo(
+            f"registry delta: missing link {link} (present in git)",
+            err=True,
+        )
+    for link in delta.extra_links:
+        typer.echo(
+            f"registry delta: extra link {link} (not in git)",
+            err=True,
+        )
+    if delta.has_differences:
+        typer.echo(
+            f"Registry differs from git ({delta.count} delta(s)). "
+            "Run 'bellman sync' to update the registry.",
+            err=True,
+        )
+    else:
+        typer.echo("Registry matches git.")
+
+
 @app.command()
 def init(
     path: Annotated[
@@ -79,7 +139,7 @@ def init(
                 )
     else:
         typer.echo(
-            "Note: libfits not found; run validate after installing libfits.",
+            "Note: libfits not found; run sync after installing libfits.",
             err=True,
         )
 
@@ -239,50 +299,61 @@ def validate(
         Path | None,
         typer.Argument(help="Roadmap root directory (default: cwd)"),
     ] = None,
-    sync: Annotated[
+    registry: Annotated[
         bool,
-        typer.Option("--sync/--no-sync", help="Sync to pyfits graph"),
+        typer.Option(
+            "--registry/--no-registry",
+            help="Compare the pyfits registry to git markdown",
+        ),
     ] = True,
-    prune: Annotated[
-        bool,
-        typer.Option("--prune", help="Prune stale graph objects"),
-    ] = False,
 ) -> None:
-    """Validate roadmap markdown and optionally sync to pyfits."""
+    """Validate roadmap markdown and compare the registry to git."""
     root = _root(path)
-    try:
-        roadmap = load(root)
-    except (ValueError, OSError) as exc:
-        typer.echo(f"load error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
+    roadmap = _load_roadmap(root)
     result = validate_roadmap(roadmap)
-    if result.errors:
-        for err in result.errors:
-            typer.echo(err.format(), err=True)
+    _emit_validation_result(result)
+
+    if not registry:
+        return
+
+    if not libfits_available():
+        typer.echo(
+            "Skipping registry delta check: libfits not available.",
+            err=True,
+        )
+        return
+
+    delta_result = compute_registry_delta(root, roadmap)
+    if isinstance(delta_result, Err):
+        err = delta_result.err_value
+        message = err.format() if isinstance(err, RegistryDeltaError) else str(err)
+        typer.echo(f"Registry delta check failed: {message}", err=True)
+        raise typer.Exit(code=1)
+    _emit_registry_deltas(delta_result.ok_value)
+
+
+@app.command()
+def sync(
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Roadmap root directory (default: cwd)"),
+    ] = None,
+) -> None:
+    """Sync git markdown into the pyfits registry after validation passes."""
+    root = _root(path)
+    roadmap = _load_roadmap(root)
+    result = validate_roadmap(roadmap)
+    _emit_validation_result(result)
+
+    if not libfits_available():
+        typer.echo("Graph sync failed: libfits not available.", err=True)
         raise typer.Exit(code=1)
 
-    for warn in result.warnings:
-        typer.echo(f"warning: {warn.format()}", err=True)
-
-    if result.warnings:
-        count = len(result.warnings)
-        typer.echo(f"Markdown validation passed with {count} warning(s).")
-    else:
-        typer.echo("Markdown validation passed.")
-
-    if sync:
-        if not libfits_available():
-            typer.echo(
-                "Skipping graph sync: libfits not available.",
-                err=True,
-            )
-            return
-        sync_result = sync_roadmap(root, prune=prune)
-        if isinstance(sync_result, Err):
-            typer.echo(f"Graph sync failed: {sync_result.err_value}", err=True)
-            raise typer.Exit(code=1)
-        typer.echo("Graph sync and libfits validation passed.")
+    sync_result = sync_roadmap(root, prune=True)
+    if isinstance(sync_result, Err):
+        typer.echo(f"Graph sync failed: {sync_result.err_value}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Graph sync and libfits validation passed.")
 
 
 @app.command()

@@ -98,8 +98,7 @@ def load_graph_history(root: Path) -> Result[GraphHistory, BellmanHistoryError]:
     if not registry_path.is_file():
         return Err(
             BellmanHistoryError(
-                "graph registry not found; run `bellman init` or "
-                "`bellman validate --sync`",
+                "graph registry not found; run `bellman init` or `bellman sync`",
                 path=str(registry_path),
             )
         )

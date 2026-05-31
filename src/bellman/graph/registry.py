@@ -24,6 +24,20 @@ def hardness_suffix(hard: Hardness) -> str:
     return hard.value
 
 
+def bellman_node_types() -> frozenset[str]:
+    """Node type names managed by bellman roadmap sync."""
+    return frozenset({"initiative", "project", "work_package", "milestone", "goal"})
+
+
+def bellman_link_types() -> frozenset[str]:
+    """Link type names managed by bellman roadmap sync."""
+    types: set[str] = {"parent_of", "promoted_from"}
+    for lt in precedes_link_types():
+        types.add(lt)
+        types.add(f"{lt}_scope")
+    return frozenset(types)
+
+
 def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
     """Register bellman types if not already present."""
     steps: list[Result[None, FitsError]] = [
