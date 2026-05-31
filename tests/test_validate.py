@@ -83,6 +83,45 @@ def test_unknown_estimate_warns(tmp_path: Path) -> None:
     assert "unknown estimate" in result.warnings[0].message
 
 
+def test_parent_with_estimate_and_sub_packages_errors(tmp_path: Path) -> None:
+    _write_project_with_wp(
+        tmp_path,
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-parent\n"
+        "    description: Parent work.\n"
+        "    estimate:\n"
+        "      optimistic: 1w\n"
+        "      most_likely: 2w\n"
+        "      pessimistic: 3w\n"
+        "    sub_packages:\n"
+        "      - title: wp-child\n"
+        "        description: Child work.\n"
+        "        estimate: unknown\n",
+    )
+    with pytest.raises(ValueError, match="must not have its own estimate"):
+        load(tmp_path)
+
+
+def test_parent_with_sub_packages_requires_no_estimate(tmp_path: Path) -> None:
+    _write_project_with_wp(
+        tmp_path,
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-parent\n"
+        "    description: Parent work.\n"
+        "    sub_packages:\n"
+        "      - title: wp-child\n"
+        "        description: Child work.\n"
+        "        estimate: unknown\n",
+    )
+    roadmap = load(tmp_path)
+    result = validate_roadmap(roadmap)
+    assert result.errors == ()
+    assert len(result.warnings) == 1
+    assert "unknown estimate" in result.warnings[0].message
+
+
 def test_missing_estimate_errors(tmp_path: Path) -> None:
     _write_project_with_wp(
         tmp_path,

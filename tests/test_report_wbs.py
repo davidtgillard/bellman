@@ -37,10 +37,7 @@ def test_wbs_headers_and_example_roadmap() -> None:
     assert rows[1][0] == "billing-redesign/wp-invoicing"
     assert rows[1][1] == "1"
     assert rows[1][2] == "wp-invoicing"
-    assert rows[1][5] == "7w"
-    assert rows[1][6] == "4w"
-    assert rows[1][7] == "2w"
-    assert rows[1][8] == "4.17w"
+    assert rows[1][5:] == ["", "", "", ""]
     assert rows[2][0] == "billing-redesign/wp-pdf-export"
     assert rows[2][1] == "1.1"
     assert rows[2][2] == "  wp-pdf-export"
@@ -59,7 +56,6 @@ work_packages:
     estimate: unknown
   - title: wp-mike
     description: Middle alphabetically.
-    estimate: unknown
     sub_packages:
       - title: wp-zed-child
         description: Child b.

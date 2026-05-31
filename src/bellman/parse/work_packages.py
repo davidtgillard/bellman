@@ -220,6 +220,12 @@ def _parse_wp_node(
     sub_packages = tuple(
         _parse_wp_node(item, path, project_name=project_name) for item in sub_raw
     )
+    if sub_packages and estimate is not None:
+        msg = (
+            f"work package {slug!r} has sub-packages and must not have "
+            f"its own estimate in {path}"
+        )
+        raise ValueError(msg)
     dependencies = _parse_dependencies(
         raw.get("dependencies"),
         path,

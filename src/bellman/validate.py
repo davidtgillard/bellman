@@ -142,7 +142,16 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
             seen.add(slug)
 
         for wp in _walk_packages(project.work_packages):
-            if wp.estimate is None:
+            if wp.sub_packages:
+                if wp.estimate is not None:
+                    errors.append(
+                        BellmanError(
+                            layout_wp_path(roadmap, project.name, wp.slug),
+                            f"work package {wp.slug!r} has sub-packages and "
+                            f"must not have its own estimate",
+                        )
+                    )
+            elif wp.estimate is None:
                 errors.append(
                     BellmanError(
                         layout_wp_path(roadmap, project.name, wp.slug),

@@ -37,6 +37,7 @@ def test_load_example_roadmap() -> None:
 def test_parse_work_packages_file() -> None:
     wp_path = EXAMPLES / "projects" / "billing-redesign" / "work-packages.yaml"
     packages = parse_work_packages(wp_path, project_name="billing-redesign")
+    assert packages[0].estimate is None
     assert packages[0].sub_packages[0].slug == "wp-pdf-export"
     assert packages[0].sub_packages[0].title == "wp-pdf-export"
     assert isinstance(packages[0].sub_packages[0].estimate, ThreePointEstimate)
@@ -131,6 +132,24 @@ def test_parse_partial_unknown_in_estimate_fails() -> None:
 def test_parse_invalid_estimate_body_fails() -> None:
     with pytest.raises(ValueError, match="must be unknown or a complete"):
         _parse_estimate_value("TBD", "path", "wp")
+
+
+def test_parse_rejects_estimate_with_sub_packages(tmp_path: Path) -> None:
+    wp_path = tmp_path / "work-packages.yaml"
+    wp_path.write_text(
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-parent\n"
+        "    description: Parent work.\n"
+        "    estimate: unknown\n"
+        "    sub_packages:\n"
+        "      - title: wp-child\n"
+        "        description: Child work.\n"
+        "        estimate: unknown\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="must not have its own estimate"):
+        parse_work_packages(wp_path, project_name="demo")
 
 
 def test_parse_title_derives_slug() -> None:
