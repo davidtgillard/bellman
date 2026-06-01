@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from io import StringIO
 from pathlib import Path
 
@@ -124,16 +125,16 @@ def test_project_total_matches_root_rollup() -> None:
     assert total.display == "2.17w"
 
 
-def test_report_wbs_tree_cli(tmp_path: Path) -> None:
+def test_report_wbs_tree_cli() -> None:
     result = runner.invoke(
         app,
         [
             "report",
             "wbs",
-            str(EXAMPLES),
             "tree",
             "--project",
             "billing-redesign",
+            str(EXAMPLES),
         ],
     )
     assert result.exit_code == 0
@@ -147,14 +148,36 @@ def test_report_wbs_tree_cli_unknown_project() -> None:
         [
             "report",
             "wbs",
-            str(EXAMPLES),
             "tree",
             "--project",
             "missing-project",
+            str(EXAMPLES),
         ],
     )
     assert result.exit_code == 1
     assert "project not found" in result.stderr
+
+
+def test_report_wbs_tree_cli_without_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    roadmap = tmp_path / "roadmap"
+    shutil.copytree(EXAMPLES, roadmap, dirs_exist_ok=True)
+    monkeypatch.chdir(roadmap)
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "wbs",
+            "tree",
+            "--project",
+            "billing-redesign",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout.count("total estimate: 2.17w") == 2
+    assert "wp-invoicing" in result.stdout
 
 
 def test_report_wbs_csv_still_works() -> None:

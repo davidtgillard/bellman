@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 from pyfits.result import Err
+from typer.core import TyperGroup
 
 from bellman import layout
 from bellman._version import version_string
@@ -261,12 +262,129 @@ def promote(
     _apply_graph_sync(root)
 
 
-wbs_app = typer.Typer(help="Work-breakdown-structure reports.")
+class _WbsTyperGroup(TyperGroup):
+    """Route ``report wbs PATH`` to the ``csv`` subcommand for compatibility."""
+
+    def resolve_command(self, ctx, args):
+        if "tree" not in args and "csv" not in args:
+            path_index: int | None = None
+            index = 0
+            while index < len(args):
+                arg = args[index]
+                if arg in ("-o", "--output", "--project", "--path"):
+                    index += 2
+                    continue
+                if arg.startswith("-"):
+                    index += 1
+                    continue
+                if arg not in self.commands:
+                    path_index = index
+                    break
+                index += 1
+            if path_index is not None:
+                args.insert(path_index, "csv")
+        return super().resolve_command(ctx, args)
+
+
+def _wbs_effective_options(
+    ctx: typer.Context,
+    *,
+    path: Path | None,
+    project: str | None,
+    output: Path | None,
+) -> tuple[Path | None, str | None, Path | None]:
+    if not ctx.obj:
+        return path, project, output
+    return (
+        path if path is not None else ctx.obj.get("path"),
+        project if project is not None else ctx.obj.get("project"),
+        output if output is not None else ctx.obj.get("output"),
+    )
+
+
+wbs_app = typer.Typer(
+    help="Work-breakdown-structure reports.",
+    cls=_WbsTyperGroup,
+)
 report_app.add_typer(wbs_app, name="wbs")
+
+
+def _load_roadmap(path: Path | None) -> tuple[Path, Roadmap]:
+    root = layout.roadmap_root(path)
+    try:
+        return root, load(root)
+    except (ValueError, OSError) as exc:
+        typer.echo(f"load error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _write_wbs_csv_report(
+    path: Path | None,
+    *,
+    project: str | None,
+    output: Path | None,
+) -> None:
+    root, roadmap = _load_roadmap(path)
+    try:
+        if output is None:
+            write_wbs_csv(roadmap, sys.stdout, project_name=project)
+            return
+
+        out_path = output if output.is_absolute() else root / output
+        write_wbs_csv_file(roadmap, out_path, project_name=project)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Wrote {out_path}")
+
+
+def _write_wbs_tree_report(
+    path: Path | None,
+    *,
+    project: str | None,
+) -> None:
+    _root_path, roadmap = _load_roadmap(path)
+    try:
+        write_wbs_tree(roadmap, sys.stdout, project_name=project)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @wbs_app.callback(invoke_without_command=True)
 def report_wbs(
+    ctx: typer.Context,
+    path: Annotated[
+        Path | None,
+        typer.Option("--path", help="Roadmap root"),
+    ] = None,
+    project: Annotated[
+        str | None,
+        typer.Option("--project", help="Export a single project by name"),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "-o",
+            "--output",
+            help="Output CSV file path (default: stdout)",
+        ),
+    ] = None,
+) -> None:
+    """Export a work-breakdown-structure CSV for roadmap work packages."""
+    ctx.ensure_object(dict)
+    ctx.obj["path"] = path
+    ctx.obj["project"] = project
+    ctx.obj["output"] = output
+    if ctx.invoked_subcommand is not None:
+        return
+
+    _write_wbs_csv_report(path, project=project, output=output)
+
+
+@wbs_app.command("csv")
+def report_wbs_csv(
     ctx: typer.Context,
     path: Annotated[
         Path | None,
@@ -286,30 +404,17 @@ def report_wbs(
     ] = None,
 ) -> None:
     """Export a work-breakdown-structure CSV for roadmap work packages."""
-    ctx.ensure_object(dict)
-    ctx.obj["path"] = path
-    if ctx.invoked_subcommand is not None:
-        return
-
-    root = layout.roadmap_root(path)
-    try:
-        roadmap = load(root)
-    except (ValueError, OSError) as exc:
-        typer.echo(f"load error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    try:
-        if output is None:
-            write_wbs_csv(roadmap, sys.stdout, project_name=project)
-            return
-
-        out_path = output if output.is_absolute() else root / output
-        write_wbs_csv_file(roadmap, out_path, project_name=project)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
-
-    typer.echo(f"Wrote {out_path}")
+    effective_path, effective_project, effective_output = _wbs_effective_options(
+        ctx,
+        path=path,
+        project=project,
+        output=output,
+    )
+    _write_wbs_csv_report(
+        effective_path,
+        project=effective_project,
+        output=effective_output,
+    )
 
 
 @wbs_app.command("tree")
@@ -325,19 +430,13 @@ def report_wbs_tree(
     ] = None,
 ) -> None:
     """Print a work-package tree with PERT estimates to stdout."""
-    group_path = ctx.obj.get("path") if ctx.obj else None
-    root = layout.roadmap_root(path if path is not None else group_path)
-    try:
-        roadmap = load(root)
-    except (ValueError, OSError) as exc:
-        typer.echo(f"load error: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
-
-    try:
-        write_wbs_tree(roadmap, sys.stdout, project_name=project)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
+    effective_path, effective_project, _effective_output = _wbs_effective_options(
+        ctx,
+        path=path,
+        project=project,
+        output=None,
+    )
+    _write_wbs_tree_report(effective_path, project=effective_project)
 
 
 @app.command()
