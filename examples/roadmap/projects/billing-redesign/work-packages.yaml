@@ -6,10 +6,7 @@ work_packages:
     sub_packages:
       - title: wp-pdf-export
         description: PDF generation and delivery.
-        estimate:
-          optimistic: 1w
-          most_likely: 2w
-          pessimistic: 4w
+        estimate: [1w, 2w, 4w]
         dependencies:
           - after: wp-invoicing
             relation: FS

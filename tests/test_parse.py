@@ -49,11 +49,7 @@ def test_parse_unknown_estimate() -> None:
 
 
 def test_parse_full_estimate() -> None:
-    raw = {
-        "optimistic": "1w",
-        "most_likely": "2w",
-        "pessimistic": "3w",
-    }
+    raw = ["1w", "2w", "3w"]
     est = _parse_estimate_value(raw, "path", "wp")
     assert isinstance(est, ThreePointEstimate)
     assert est.optimistic == 1.0
@@ -63,49 +59,26 @@ def test_parse_full_estimate() -> None:
 
 
 def test_parse_mixed_duration_suffixes_fails() -> None:
-    raw = {
-        "optimistic": "1w",
-        "most_likely": "2d",
-        "pessimistic": "3w",
-    }
+    raw = ["1w", "2d", "3w"]
     with pytest.raises(ValueError, match="same duration suffix"):
         _parse_estimate_value(raw, "path", "wp")
 
 
-def test_parse_estimate_rejects_unit_field() -> None:
-    raw = {
-        "optimistic": "1w",
-        "most_likely": "2w",
-        "pessimistic": "3w",
-        "unit": "weeks",
-    }
-    with pytest.raises(ValueError, match="must not include unit"):
-        _parse_estimate_value(raw, "path", "wp")
-
-
 def test_parse_estimate_requires_suffix() -> None:
-    raw = {"optimistic": 1, "most_likely": "2w", "pessimistic": "3w"}
+    raw = [1, "2w", "3w"]
     with pytest.raises(ValueError, match="must be a duration with h, d, or w suffix"):
         _parse_estimate_value(raw, "path", "wp")
 
 
 def test_parse_estimate_allows_equal_values() -> None:
-    raw = {
-        "optimistic": "2w",
-        "most_likely": "2w",
-        "pessimistic": "2w",
-    }
+    raw = ["2w", "2w", "2w"]
     est = _parse_estimate_value(raw, "path", "wp")
     assert isinstance(est, ThreePointEstimate)
     assert est.optimistic == est.most_likely == est.pessimistic == 2.0
 
 
 def test_parse_estimate_rejects_out_of_order_values() -> None:
-    raw = {
-        "optimistic": "7w",
-        "most_likely": "2w",
-        "pessimistic": "1w",
-    }
+    raw = ["7w", "2w", "1w"]
     with pytest.raises(
         ValueError,
         match="optimistic <= most_likely <= pessimistic",
@@ -114,23 +87,29 @@ def test_parse_estimate_rejects_out_of_order_values() -> None:
 
 
 def test_parse_partial_estimate_fails() -> None:
-    raw = {"optimistic": "1w", "most_likely": "2w"}
+    raw = ["1w", "2w"]
     with pytest.raises(ValueError, match="incomplete estimate"):
         _parse_estimate_value(raw, "path", "wp")
 
 
 def test_parse_partial_unknown_in_estimate_fails() -> None:
-    raw = {
-        "optimistic": "unknown",
-        "most_likely": "2w",
-        "pessimistic": "3w",
-    }
+    raw = ["unknown", "2w", "3w"]
     with pytest.raises(ValueError, match="partial estimate with unknown"):
         _parse_estimate_value(raw, "path", "wp")
 
 
+def test_parse_estimate_rejects_mapping() -> None:
+    raw = {
+        "optimistic": "1w",
+        "most_likely": "2w",
+        "pessimistic": "3w",
+    }
+    with pytest.raises(ValueError, match="must be unknown or"):
+        _parse_estimate_value(raw, "path", "wp")
+
+
 def test_parse_invalid_estimate_body_fails() -> None:
-    with pytest.raises(ValueError, match="must be unknown or a complete"):
+    with pytest.raises(ValueError, match="must be unknown or \\[optimistic"):
         _parse_estimate_value("TBD", "path", "wp")
 
 

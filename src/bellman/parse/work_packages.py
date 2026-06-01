@@ -34,9 +34,13 @@ def _slug_from_title(title: str) -> str:
         return slugify(title)
 
 
+_ESTIMATE_FIELDS = ("optimistic", "most_likely", "pessimistic")
+
+
 def _invalid_estimate_msg(slug: str, path: str) -> str:
     return (
-        f"estimate must be unknown or a complete 3-point estimate "
+        f"estimate must be unknown or "
+        f"[optimistic, most_likely, pessimistic] durations "
         f"for work package {slug!r} in {path}"
     )
 
@@ -73,23 +77,16 @@ def _parse_estimate_value(raw: Any, path: str, slug: str) -> Estimate:
         if raw.strip().lower() == "unknown":
             return UNKNOWN_ESTIMATE
         raise ValueError(_invalid_estimate_msg(slug, path))
-    if not isinstance(raw, dict):
+    if not isinstance(raw, list):
         raise ValueError(_invalid_estimate_msg(slug, path))
-    if "unit" in raw:
-        msg = (
-            f"estimate must not include unit; use h, d, or w suffixes "
-            f"for work package {slug!r} in {path}"
-        )
-        raise ValueError(msg)
-    required = ("optimistic", "most_likely", "pessimistic")
-    if not all(k in raw for k in required):
+    if len(raw) != 3:
         msg = f"incomplete estimate for work package {slug!r} in {path}"
         raise ValueError(msg)
     values: dict[str, float] = {}
     units: set[str] = set()
-    for key in required:
-        amount, unit = _parse_duration_component(raw[key], path, slug, key)
-        values[key] = amount
+    for field, item in zip(_ESTIMATE_FIELDS, raw, strict=True):
+        amount, unit = _parse_duration_component(item, path, slug, field)
+        values[field] = amount
         units.add(unit)
     if len(units) != 1:
         msg = (
