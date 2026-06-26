@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 from pyfits import Id, ObjectTypeName, Repo, TargetId
@@ -23,8 +25,14 @@ from bellman.graph.desired import (
     scope_node_id,
     wp_node_id,
 )
-from bellman.graph.fits_errors import ignore_duplicate_instance, ignore_duplicate_link
+from bellman.graph.fits_errors import (
+    ignore_duplicate_instance,
+    ignore_duplicate_link,
+    ignore_nothing_to_remove,
+    is_already_exists,
+)
 from bellman.graph.history import load_graph_history
+from bellman.graph.legacy import is_legacy_flat_node_id
 from bellman.graph.registry import bootstrap_registry
 from bellman.model import Initiative, Project, Roadmap
 from bellman.roadmap import load
@@ -33,6 +41,102 @@ from bellman.roadmap import load
 def libfits_available() -> bool:
     """Return True when libfits can be loaded."""
     return isinstance(load_library(), Ok)
+
+
+def _debug_log(
+    location: str,
+    message: str,
+    data: dict[str, object],
+    *,
+    hypothesis_id: str,
+) -> None:
+    # #region agent log
+    try:
+        with open(
+            "/home/dgillard/src/bellman.git/.cursor/debug-020e3e.log",
+            "a",
+            encoding="utf-8",
+        ) as log_file:
+            log_file.write(
+                json.dumps(
+                    {
+                        "sessionId": "020e3e",
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "timestamp": int(time.time() * 1000),
+                        "hypothesisId": hypothesis_id,
+                    }
+                )
+                + "\n"
+            )
+    except OSError:
+        pass
+    # #endregion
+
+
+def _legacy_id_for_qualified(type_name: str, qualified_id: str) -> str | None:
+    """Return the pre-migration flat id for a type-qualified node id."""
+    prefix = f"{type_name}--"
+    if not qualified_id.startswith(prefix):
+        return None
+    legacy_id = qualified_id[len(prefix) :]
+    if is_legacy_flat_node_id(type_name, legacy_id):
+        return legacy_id
+    return None
+
+
+def _migrate_legacy_node_ids(
+    repo: Repo,
+    root: Path,
+    desired: set[str],
+) -> Result[None, FitsError]:
+    """Rename legacy flat node ids to type-qualified ids before ensure/prune."""
+    history_result = load_graph_history(root)
+    if isinstance(history_result, Err):
+        return Ok(None)
+
+    live_node_ids = {
+        inst.instance_id
+        for inst in history_result.ok_value.instances
+        if inst.kind == "node"
+    }
+
+    for inst in history_result.ok_value.instances:
+        if inst.kind != "node":
+            continue
+        if not is_legacy_flat_node_id(inst.type_name, inst.instance_id):
+            continue
+        legacy_id = inst.instance_id
+        qualified_id = entity_node_id(inst.type_name, legacy_id)
+        if qualified_id not in desired:
+            continue
+
+        _debug_log(
+            "sync.py:_migrate_legacy_node_ids",
+            "legacy migration candidate",
+            {
+                "legacy_id": legacy_id,
+                "qualified_id": qualified_id,
+                "qualified_exists": qualified_id in live_node_ids,
+            },
+            hypothesis_id="A",
+        )
+
+        if qualified_id in live_node_ids:
+            removed = ignore_nothing_to_remove(repo.remove(Id(legacy_id)))
+            if isinstance(removed, Err):
+                return removed
+            live_node_ids.discard(legacy_id)
+            continue
+
+        renamed = repo.rename_instance(Id(legacy_id), Id(qualified_id))
+        if isinstance(renamed, Err):
+            return renamed
+        live_node_ids.discard(legacy_id)
+        live_node_ids.add(qualified_id)
+
+    return Ok(None)
 
 
 def _scope_node_id(scope: Initiative | Project) -> Id:
@@ -77,7 +181,17 @@ def _prune_stale_registry(
     for inst in history_result.ok_value.instances:
         if inst.kind != "node" or inst.instance_id in desired:
             continue
-        removed = repo.remove(Id(inst.instance_id))
+        removed = ignore_nothing_to_remove(repo.remove(Id(inst.instance_id)))
+        _debug_log(
+            "sync.py:_prune_stale_registry",
+            "prune registry instance",
+            {
+                "instance_id": inst.instance_id,
+                "result": "err" if isinstance(removed, Err) else "ok",
+                "code": removed.err_value.code if isinstance(removed, Err) else None,
+            },
+            hypothesis_id="B",
+        )
         if isinstance(removed, Err):
             return removed
     return Ok(None)
@@ -99,7 +213,17 @@ def _prune_stale_graph(
     graph = reloaded.ok_value
     stale_nodes = [n for n in graph.nodes if n.id.value not in desired]
     for node in stale_nodes:
-        removed = repo.remove(node.id)
+        removed = ignore_nothing_to_remove(repo.remove(node.id))
+        _debug_log(
+            "sync.py:_prune_stale_graph",
+            "prune graph node",
+            {
+                "node_id": node.id.value,
+                "result": "err" if isinstance(removed, Err) else "ok",
+                "code": removed.err_value.code if isinstance(removed, Err) else None,
+            },
+            hypothesis_id="B",
+        )
         if isinstance(removed, Err):
             return removed
     if stale_nodes:
@@ -116,7 +240,7 @@ def _prune_stale_graph(
         link_id = edge.id
         if link_id is None:
             continue
-        removed = repo.remove(link_id)
+        removed = ignore_nothing_to_remove(repo.remove(link_id))
         if isinstance(removed, Err):
             return removed
     if stale_edges:
@@ -137,6 +261,13 @@ def _ensure_node(
 ) -> Result[Id, FitsError]:
     if node_id.value in _graph_node_ids(graph):
         return Ok(node_id)
+    legacy_id = _legacy_id_for_qualified(type_name, node_id.value)
+    if legacy_id is not None and legacy_id in _graph_node_ids(graph):
+        renamed = repo.rename_instance(Id(legacy_id), node_id)
+        if isinstance(renamed, Ok):
+            return Ok(node_id)
+        if isinstance(renamed, Err) and not is_already_exists(renamed.err_value):
+            return renamed
     result = repo.new_node(
         ObjectTypeName(type_name),
         target_id=TargetId.parse(node_id.value),
@@ -333,6 +464,14 @@ def sync_roadmap(
         if isinstance(graph_result, Err):
             return graph_result
         graph = graph_result.ok_value
+        desired = _desired_graph_node_ids(roadmap)
+        migrated = _migrate_legacy_node_ids(repo, root, desired)
+        if isinstance(migrated, Err):
+            return migrated
+        graph_result = repo.output_graph()
+        if isinstance(graph_result, Err):
+            return graph_result
+        graph = graph_result.ok_value
 
         for initiative in roadmap.initiatives:
             nid = _scope_node_id(initiative)
@@ -414,9 +553,7 @@ def sync_roadmap(
                 return dep_sync
 
         if prune:
-            pruned = _prune_stale_graph(
-                repo, root, graph, _desired_graph_node_ids(roadmap)
-            )
+            pruned = _prune_stale_graph(repo, root, graph, desired)
             if isinstance(pruned, Err):
                 return pruned
             graph = pruned.ok_value
@@ -424,4 +561,10 @@ def sync_roadmap(
         val = repo.validate()
         if isinstance(val, Err):
             return val
+    _debug_log(
+        "sync.py:sync_roadmap",
+        "sync complete",
+        {"prune": prune, "root": str(root)},
+        hypothesis_id="C",
+    )
     return Ok(None)

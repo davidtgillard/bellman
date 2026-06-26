@@ -55,3 +55,17 @@ def ignore_duplicate_link(
     if isinstance(result, Err) and is_already_exists(result.err_value):
         return Ok(link_id)
     return result
+
+
+def is_nothing_to_remove(error: FitsError) -> bool:
+    """Return True when libfits has a registry entry but no on-disk object to remove."""
+    return error.code == "NothingToRemove"
+
+
+def ignore_nothing_to_remove(
+    result: Result[None, FitsError],
+) -> Result[None, FitsError]:
+    """Treat missing on-disk instances as success when pruning stale graph objects."""
+    if isinstance(result, Err) and is_nothing_to_remove(result.err_value):
+        return Ok(None)
+    return result
