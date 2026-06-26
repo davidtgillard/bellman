@@ -9,8 +9,15 @@ from pyfits import Repo
 from pyfits.errors import FitsError
 from pyfits.result import Err, Ok, Result
 
-from bellman.graph.desired import DesiredLink, DesiredNode, desired_links, desired_nodes
+from bellman.graph.desired import (
+    DesiredLink,
+    DesiredNode,
+    desired_links,
+    desired_nodes,
+    natural_name_from_node_id,
+)
 from bellman.graph.history import load_graph_history
+from bellman.graph.legacy import registry_needs_id_migration
 from bellman.graph.registry import bellman_link_types, bellman_node_types
 from bellman.graph.sync import libfits_available
 from bellman.model import Roadmap
@@ -24,6 +31,7 @@ class RegistryDelta:
     extra_nodes: tuple[str, ...]
     missing_links: tuple[str, ...]
     extra_links: tuple[str, ...]
+    needs_id_migration: bool = False
 
     @property
     def has_differences(self) -> bool:
@@ -57,7 +65,7 @@ class RegistryDeltaError:
 
 
 def _format_node(node: DesiredNode) -> str:
-    return f"{node.type_name} {node.node_id}"
+    return f"{node.type_name} {natural_name_from_node_id(node.node_id)}"
 
 
 def _format_link(link: DesiredLink) -> str:
@@ -153,5 +161,8 @@ def compute_registry_delta(
             extra_nodes=tuple(extra_nodes),
             missing_links=tuple(missing_links),
             extra_links=tuple(extra_links),
+            needs_id_migration=registry_needs_id_migration(
+                actual_node_set, desired_node_set
+            ),
         )
     )

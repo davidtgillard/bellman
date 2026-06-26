@@ -34,6 +34,12 @@ pyfits = [
     { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl", marker = "python_version == '3.14'" },
 ]
 
+[tool.uv]
+constraint-dependencies = [
+    "msgpack>=1.2.1",
+    "pip>=26.1.2",
+]
+
 [dependency-groups]
 dev = [
     "basedpyright>=1.29.0",

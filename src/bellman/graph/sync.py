@@ -14,6 +14,7 @@ from bellman import layout
 from bellman.graph import link_naming
 from bellman.graph.desired import (
     desired_node_ids,
+    entity_node_id,
     flatten_wps,
     goal_node_id,
     milestone_node_id,
@@ -362,7 +363,8 @@ def sync_roadmap(
         for project in roadmap.projects:
             pid = _scope_node_id(project)
             if layout.archived_initiative_path(root, project.name).exists():
-                removed = repo.remove(pid)
+                init_id = Id(entity_node_id("initiative", project.name))
+                removed = repo.remove(init_id)
                 if isinstance(removed, Err):
                     return removed
                 reloaded = _reload_graph(repo)

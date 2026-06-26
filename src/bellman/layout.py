@@ -196,6 +196,119 @@ def create_goal(root: Path, raw_name: str) -> Path:
     return path
 
 
+_LAYOUT_DIRS = (INITIATIVES_DIR, PROJECTS_DIR, MILESTONES_DIR, GOALS_DIR)
+
+
+def _is_path_shaped_ref(ref: str) -> bool:
+    if ref.endswith(".md"):
+        return True
+    if "/" in ref or "\\" in ref:
+        return True
+    return any(ref.startswith(f"{d}/") for d in _LAYOUT_DIRS)
+
+
+def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
+    """Locate an entity by layout-relative path. Returns (kind, path).
+
+    Args:
+        root: Roadmap root directory.
+        ref: Path relative to ``root`` (e.g. ``goals/foo.md``, ``projects/foo``).
+
+    Returns:
+        Entity kind string and resolved filesystem path.
+
+    Raises:
+        BellmanLayoutError: When the path is invalid, escapes the roadmap root,
+            or does not match a known entity layout.
+    """
+    normalized = ref.replace("\\", "/").strip("/")
+    if not normalized or ".." in normalized.split("/"):
+        msg = f"invalid entity path {ref!r}"
+        raise BellmanLayoutError(msg)
+
+    candidate = (root / normalized).resolve()
+    root_resolved = root.resolve()
+    try:
+        candidate.relative_to(root_resolved)
+    except ValueError as exc:
+        msg = f"entity path {ref!r} is outside roadmap at {root}"
+        raise BellmanLayoutError(msg) from exc
+
+    rel = candidate.relative_to(root_resolved)
+    parts = rel.parts
+    if not parts:
+        msg = f"invalid entity path {ref!r}"
+        raise BellmanLayoutError(msg)
+
+    top = parts[0]
+    if top == GOALS_DIR:
+        if len(parts) != 2 or not parts[1].endswith(".md"):
+            msg = f"invalid goal path {ref!r}; expected goals/{{name}}.md"
+            raise BellmanLayoutError(msg)
+        path = root_resolved / rel
+        if not path.is_file():
+            msg = f"no entity at {ref!r} in roadmap at {root}"
+            raise BellmanLayoutError(msg)
+        return "goal", path
+
+    if top == MILESTONES_DIR:
+        if len(parts) != 2 or not parts[1].endswith(".md"):
+            msg = f"invalid milestone path {ref!r}; expected milestones/{{name}}.md"
+            raise BellmanLayoutError(msg)
+        path = root_resolved / rel
+        if not path.is_file():
+            msg = f"no entity at {ref!r} in roadmap at {root}"
+            raise BellmanLayoutError(msg)
+        return "milestone", path
+
+    if top == INITIATIVES_DIR:
+        if len(parts) != 2 or not parts[1].endswith(".md"):
+            msg = f"invalid initiative path {ref!r}; expected initiatives/{{name}}.md"
+            raise BellmanLayoutError(msg)
+        path = root_resolved / rel
+        if not path.is_file():
+            msg = f"no entity at {ref!r} in roadmap at {root}"
+            raise BellmanLayoutError(msg)
+        if path.name.endswith(ARCHIVED_SUFFIX):
+            return "archived-initiative", path
+        return "initiative", path
+
+    if top == PROJECTS_DIR:
+        if len(parts) == 2 and not parts[1].endswith(".md"):
+            path = root_resolved / rel
+            if not path.is_dir():
+                msg = f"no entity at {ref!r} in roadmap at {root}"
+                raise BellmanLayoutError(msg)
+            return "project", path
+        if len(parts) == 1:
+            path = root_resolved / rel
+            if not path.is_dir():
+                msg = f"no entity at {ref!r} in roadmap at {root}"
+                raise BellmanLayoutError(msg)
+            return "project", path
+        if len(parts) == 2 and parts[1].endswith(".md"):
+            path = root_resolved / rel
+            if not path.is_file():
+                msg = f"no entity at {ref!r} in roadmap at {root}"
+                raise BellmanLayoutError(msg)
+            project_name = parts[1][:-3]
+            if parts[1] != f"{project_name}.md":
+                msg = (
+                    f"invalid project path {ref!r}; "
+                    "expected projects/{name}/{name}.md"
+                )
+                raise BellmanLayoutError(msg)
+            return "project", path.parent
+        msg = (
+            f"invalid project path {ref!r}; "
+            "expected projects/{name} or projects/{name}/{name}.md"
+        )
+        raise BellmanLayoutError(msg)
+
+    msg = f"invalid entity path {ref!r}; must be under {', '.join(_LAYOUT_DIRS)}"
+    raise BellmanLayoutError(msg)
+
+
 def find_entity(root: Path, name: str) -> tuple[str, Path]:
     """Locate an entity by natural name. Returns (kind, path)."""
     validate_kebab(name)
@@ -217,14 +330,30 @@ def find_entity(root: Path, name: str) -> tuple[str, Path]:
     return found[0]
 
 
-def delete_entity(root: Path, name: str, *, force: bool = False) -> None:
-    """Delete an initiative, project, milestone, or goal."""
+def delete_entity(root: Path, ref: str, *, force: bool = False) -> Path:
+    """Delete an initiative, project, milestone, or goal.
+
+    Args:
+        root: Roadmap root directory.
+        ref: Natural entity name or layout-relative path (e.g. ``goals/foo.md``).
+        force: Reserved for future dependency checks.
+
+    Returns:
+        The deleted entity path.
+
+    Raises:
+        BellmanLayoutError: When the entity cannot be resolved or deleted.
+    """
     _ = force  # reserved for dependency checks in validate layer
-    kind, path = find_entity(root, name)
+    if _is_path_shaped_ref(ref):
+        kind, path = resolve_entity_path(root, ref)
+    else:
+        kind, path = find_entity(root, ref)
     if kind == "project":
         shutil.rmtree(path)
     else:
         path.unlink()
+    return path
 
 
 def promote_initiative(root: Path, raw_name: str) -> Path:

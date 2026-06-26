@@ -21,7 +21,8 @@ def test_desired_nodes_include_goals() -> None:
     roadmap = load(EXAMPLES)
     nodes = desired_nodes(roadmap)
     assert any(
-        node.type_name == "goal" and node.node_id == "reduce-churn" for node in nodes
+        node.type_name == "goal" and node.node_id == "goal--reduce-churn"
+        for node in nodes
     )
 
 
@@ -91,6 +92,41 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
     delta = result.ok_value
     assert delta.extra_nodes == ("goal orphan-goal",)
     assert delta.has_differences
+
+
+def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    (tmp_path / "goals" / "manual-goal.md").write_text(
+        "# Manual Goal\n\nAdded by hand.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".fits").mkdir()
+    roadmap = load(tmp_path)
+    history = GraphHistory(
+        instances=(
+            InstanceRecord(
+                guid="00000000-0000-0000-0000-000000000001",
+                instance_id="manual-goal",
+                type_name="goal",
+                kind="node",
+            ),
+        )
+    )
+    with (
+        patch("bellman.graph.delta.libfits_available", return_value=True),
+        patch(
+            "bellman.graph.delta.load_graph_history",
+            return_value=Ok(history),
+        ),
+        patch(
+            "bellman.graph.delta.Repo.open",
+            return_value=Ok(_FakeRepo(graph=Graph(nodes=(), edges=()))),
+        ),
+    ):
+        result = compute_registry_delta(tmp_path, roadmap)
+
+    assert isinstance(result, Ok)
+    assert result.ok_value.needs_id_migration
 
 
 def test_compute_registry_delta_no_differences_when_aligned(tmp_path: Path) -> None:

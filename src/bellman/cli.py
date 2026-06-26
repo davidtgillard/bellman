@@ -118,6 +118,12 @@ def _emit_registry_deltas(delta: RegistryDelta) -> None:
             "Run 'bellman sync' to update the registry.",
             err=True,
         )
+        if delta.needs_id_migration:
+            typer.echo(
+                "Registry uses legacy flat node IDs. Run 'bellman sync' to migrate "
+                "the graph.",
+                err=True,
+            )
     else:
         typer.echo("Registry matches git.")
 
@@ -231,15 +237,20 @@ def create_goal(
 
 @app.command()
 def delete(
-    name: Annotated[str, typer.Argument(help="Entity natural name")],
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Entity natural name or layout-relative path (e.g. goals/foo.md)"
+        ),
+    ],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
     force: Annotated[bool, typer.Option("--force", help="Force delete")] = False,
 ) -> None:
     """Delete an initiative, project, milestone, or goal."""
     root = _root(path)
     try:
-        layout.delete_entity(root, name, force=force)
-        typer.echo(f"Deleted {name}")
+        deleted = layout.delete_entity(root, name, force=force)
+        typer.echo(f"Deleted {deleted.relative_to(root)}")
     except BellmanLayoutError as exc:
         typer.echo(exc.message, err=True)
         raise typer.Exit(code=1) from exc

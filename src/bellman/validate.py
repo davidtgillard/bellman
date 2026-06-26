@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from bellman.errors import BellmanError, BellmanWarning
+from bellman.graph.desired import resolve_entity_ref
 from bellman.model import (
     Hardness,
     PrecedenceEdge,
@@ -75,26 +76,26 @@ def _has_cycle(edges: list[PrecedenceEdge], *, mandatory_only: bool) -> bool:
     return any(dfs(n) for n in nodes)
 
 
-def _resolve_ref(
+def _dependency_ref_error(
     ref: str,
     roadmap: Roadmap,
     project_name: str | None,
-) -> bool:
+) -> str | None:
+    """Return an error message when ``ref`` is invalid; otherwise ``None``."""
     if "/" in ref:
-        parts = ref.split("/", 1)
-        proj, slug = parts[0], parts[1]
-        return slug in roadmap.work_package_slugs(proj)
-    if roadmap.initiative_by_name(ref) is not None:
-        return True
-    if roadmap.project_by_name(ref) is not None:
-        return True
-    if roadmap.goal_by_name(ref) is not None:
-        return True
-    if roadmap.milestone_by_name(ref) is not None:
-        return True
+        proj, slug = ref.split("/", 1)
+        if slug in roadmap.work_package_slugs(proj):
+            return None
+        return f"unknown dependency predecessor {ref!r}"
     if project_name is not None and ref in roadmap.work_package_slugs(project_name):
-        return True
-    return False
+        return None
+    try:
+        resolved = resolve_entity_ref(roadmap, ref)
+    except ValueError as exc:
+        return str(exc)
+    if resolved == ref:
+        return f"unknown dependency predecessor {ref!r}"
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,11 +168,12 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
                 )
 
         for _, edge in _collect_wp_edges(project.work_packages, project.name):
-            if not _resolve_ref(edge.predecessor, roadmap, project.name):
+            ref_error = _dependency_ref_error(edge.predecessor, roadmap, project.name)
+            if ref_error is not None:
                 errors.append(
                     BellmanError(
                         project.path,
-                        f"unknown dependency predecessor {edge.predecessor!r}",
+                        ref_error,
                     )
                 )
         wp_edges = [
@@ -197,11 +199,12 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
     scope_edges: list[PrecedenceEdge] = []
     for scope in roadmap.all_work_scopes():
         for edge in scope.dependencies:
-            if not _resolve_ref(edge.predecessor, roadmap, None):
+            ref_error = _dependency_ref_error(edge.predecessor, roadmap, None)
+            if ref_error is not None:
                 errors.append(
                     BellmanError(
                         scope.path,
-                        f"unknown dependency predecessor {edge.predecessor!r}",
+                        ref_error,
                     )
                 )
             scope_edges.append(

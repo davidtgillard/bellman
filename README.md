@@ -24,6 +24,8 @@ bellman update           # download and replace the binary (PyInstaller builds o
 
 Bellman checks for updates in the background (at most once per 24 hours by default) when you run any other subcommand.
 
+After upgrading to a release that introduces type-qualified graph node IDs, run `bellman sync` once per roadmap so the pyfits registry is rebuilt under the new id scheme.
+
 ### Configuration
 
 Settings live in `$HOME/.bellman/bellman-settings.toml`:

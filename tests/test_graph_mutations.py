@@ -40,8 +40,8 @@ def test_create_initiative_registers_in_graph(tmp_path: Path) -> None:
     layout.create_initiative(tmp_path, "settings-manager")
     result = sync_roadmap(tmp_path)
     assert isinstance(result, Ok)
-    assert _instance_type(tmp_path, "settings-manager") == "initiative"
-    assert _has_live_instance(tmp_path, "settings-manager")
+    assert _instance_type(tmp_path, "initiative--settings-manager") == "initiative"
+    assert _has_live_instance(tmp_path, "initiative--settings-manager")
 
 
 @pytest.mark.integration
@@ -52,14 +52,14 @@ def test_delete_prunes_graph_node(tmp_path: Path) -> None:
     _bootstrap_pyfits(tmp_path)
     layout.create_goal(tmp_path, "my-goal")
     assert isinstance(sync_roadmap(tmp_path), Ok)
-    assert _has_live_instance(tmp_path, "my-goal")
+    assert _has_live_instance(tmp_path, "goal--my-goal")
     layout.delete_entity(tmp_path, "my-goal")
     result = sync_roadmap(tmp_path, prune=True)
     assert isinstance(result, Ok)
-    assert not _has_live_instance(tmp_path, "my-goal")
+    assert not _has_live_instance(tmp_path, "goal--my-goal")
     history = load_graph_history(tmp_path)
     assert isinstance(history, Ok)
-    assert all(i.instance_id != "my-goal" for i in history.ok_value.instances)
+    assert all(i.instance_id != "goal--my-goal" for i in history.ok_value.instances)
 
 
 @pytest.mark.integration
@@ -70,9 +70,24 @@ def test_promote_registers_project(tmp_path: Path) -> None:
     _bootstrap_pyfits(tmp_path)
     layout.create_initiative(tmp_path, "grow-feature")
     assert isinstance(sync_roadmap(tmp_path), Ok)
-    assert _instance_type(tmp_path, "grow-feature") == "initiative"
+    assert _instance_type(tmp_path, "initiative--grow-feature") == "initiative"
     layout.promote_initiative(tmp_path, "grow-feature")
     result = sync_roadmap(tmp_path)
     assert isinstance(result, Ok)
-    assert _instance_type(tmp_path, "grow-feature") == "project"
-    assert _has_live_instance(tmp_path, "grow-feature")
+    assert _instance_type(tmp_path, "project--grow-feature") == "project"
+    assert _has_live_instance(tmp_path, "project--grow-feature")
+    assert not _has_live_instance(tmp_path, "initiative--grow-feature")
+
+
+@pytest.mark.integration
+def test_sync_coexists_goal_and_initiative_same_name(tmp_path: Path) -> None:
+    if not libfits_available():
+        pytest.skip("libfits not available")
+    layout.ensure_roadmap_dirs(tmp_path)
+    _bootstrap_pyfits(tmp_path)
+    layout.create_goal(tmp_path, "system-mci")
+    layout.create_initiative(tmp_path, "system-mci")
+    result = sync_roadmap(tmp_path)
+    assert isinstance(result, Ok)
+    assert _has_live_instance(tmp_path, "goal--system-mci")
+    assert _has_live_instance(tmp_path, "initiative--system-mci")

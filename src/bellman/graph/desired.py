@@ -25,9 +25,27 @@ class DesiredLink:
     to_id: str
 
 
+def entity_node_id(type_name: str, name: str) -> str:
+    """Build a type-qualified opaque node id for pyfits."""
+    return f"{type_name}--{name}"
+
+
+_QUALIFIED_PREFIXES = ("initiative--", "project--", "goal--", "milestone--")
+
+
+def natural_name_from_node_id(node_id: str) -> str:
+    """Extract the natural entity name from an opaque node id for display."""
+    for prefix in _QUALIFIED_PREFIXES:
+        if node_id.startswith(prefix):
+            return node_id[len(prefix) :]
+    return node_id
+
+
 def scope_node_id(scope: Initiative | Project) -> str:
     """Opaque node id for an initiative or project."""
-    return scope.name
+    if isinstance(scope, Project):
+        return entity_node_id("project", scope.name)
+    return entity_node_id("initiative", scope.name)
 
 
 def wp_node_id(project_name: str, slug: str) -> str:
@@ -37,12 +55,12 @@ def wp_node_id(project_name: str, slug: str) -> str:
 
 def milestone_node_id(name: str) -> str:
     """Opaque node id for a milestone."""
-    return name
+    return entity_node_id("milestone", name)
 
 
 def goal_node_id(name: str) -> str:
     """Opaque node id for a goal."""
-    return name
+    return entity_node_id("goal", name)
 
 
 def flatten_wps(
@@ -64,18 +82,44 @@ def resolve_wp_ref(project_name: str, ref: str) -> str:
     return wp_node_id(project_name, slug)
 
 
-def resolve_scope_ref(roadmap: Roadmap, ref: str) -> str:
-    """Resolve a work-scope dependency reference to an opaque node id."""
-    project = roadmap.project_by_name(ref)
-    if project is not None:
-        return scope_node_id(project)
-    initiative = roadmap.initiative_by_name(ref)
-    if initiative is not None:
-        return scope_node_id(initiative)
+def resolve_entity_ref(roadmap: Roadmap, ref: str) -> str:
+    """Resolve a bare markdown entity reference to a qualified opaque node id.
+
+    Args:
+        roadmap: Loaded roadmap snapshot.
+        ref: Bare entity name from markdown dependency syntax.
+
+    Returns:
+        Qualified node id when exactly one entity matches, otherwise ``ref``
+        unchanged when no entity matches.
+
+    Raises:
+        ValueError: When more than one entity kind matches ``ref``.
+    """
+    matches: list[tuple[str, str]] = []
+    if roadmap.project_by_name(ref) is not None:
+        matches.append(("project", entity_node_id("project", ref)))
+    if roadmap.initiative_by_name(ref) is not None:
+        matches.append(("initiative", entity_node_id("initiative", ref)))
     for archived in roadmap.archived_initiatives:
         if archived.name == ref and roadmap.project_by_name(ref) is None:
-            return scope_node_id(archived)
+            matches.append(("initiative", entity_node_id("initiative", ref)))
+    if roadmap.milestone_by_name(ref) is not None:
+        matches.append(("milestone", entity_node_id("milestone", ref)))
+    if roadmap.goal_by_name(ref) is not None:
+        matches.append(("goal", entity_node_id("goal", ref)))
+    if len(matches) > 1:
+        kinds = ", ".join(kind for kind, _ in matches)
+        msg = f"ambiguous dependency reference {ref!r}: matches {kinds}"
+        raise ValueError(msg)
+    if len(matches) == 1:
+        return matches[0][1]
     return ref
+
+
+def resolve_scope_ref(roadmap: Roadmap, ref: str) -> str:
+    """Resolve a work-scope dependency reference to an opaque node id."""
+    return resolve_entity_ref(roadmap, ref)
 
 
 def desired_nodes(roadmap: Roadmap) -> set[DesiredNode]:
