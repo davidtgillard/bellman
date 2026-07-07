@@ -22,6 +22,7 @@ from bellman.graph.sync import (
     init_pyfits_repo,
     libfits_available,
     prune_deleted_entity,
+    sync_created_entity,
     sync_roadmap,
 )
 from bellman.model import Roadmap
@@ -59,6 +60,18 @@ def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
         typer.echo("Note: libfits not found; graph not updated.", err=True)
         return
     result = sync_roadmap(root, prune=prune)
+    if isinstance(result, Err):
+        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Graph sync passed.")
+
+
+def _apply_created_entity_sync(root: Path, kind: str, name: str) -> None:
+    """Register a created entity in pyfits without loading the full roadmap."""
+    if not libfits_available():
+        typer.echo("Note: libfits not found; graph not updated.", err=True)
+        return
+    result = sync_created_entity(root, kind, name)
     if isinstance(result, Err):
         typer.echo(f"Graph sync failed: {result.err_value}", err=True)
         raise typer.Exit(code=1)
@@ -198,7 +211,7 @@ def create_initiative(
     except (BellmanLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-    _apply_graph_sync(root)
+    _apply_created_entity_sync(root, "initiative", created.stem)
 
 
 @create_app.command("project")
@@ -215,7 +228,7 @@ def create_project(
     except (BellmanLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-    _apply_graph_sync(root)
+    _apply_created_entity_sync(root, "project", created.name)
 
 
 @create_app.command("milestone")
@@ -232,7 +245,7 @@ def create_milestone(
     except (BellmanLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-    _apply_graph_sync(root)
+    _apply_created_entity_sync(root, "milestone", created.stem)
 
 
 @create_app.command("goal")
@@ -249,7 +262,7 @@ def create_goal(
     except (BellmanLayoutError, ValueError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
-    _apply_graph_sync(root)
+    _apply_created_entity_sync(root, "goal", created.stem)
 
 
 @app.command()

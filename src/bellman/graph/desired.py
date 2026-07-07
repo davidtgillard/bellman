@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
+from bellman import layout
 from bellman.graph import link_naming
 from bellman.model import Initiative, PrecedenceEdge, Project, Roadmap, WorkPackage
 
@@ -120,6 +122,43 @@ def resolve_entity_ref(roadmap: Roadmap, ref: str) -> str:
 def resolve_scope_ref(roadmap: Roadmap, ref: str) -> str:
     """Resolve a work-scope dependency reference to an opaque node id."""
     return resolve_entity_ref(roadmap, ref)
+
+
+def resolve_entity_ref_from_layout(root: Path, ref: str) -> str:
+    """Resolve a bare entity name using filesystem layout (no full roadmap load).
+
+    Args:
+        root: Roadmap root directory.
+        ref: Bare entity name from markdown dependency syntax.
+
+    Returns:
+        Qualified node id when exactly one entity matches, otherwise ``ref``
+        unchanged when no entity matches.
+
+    Raises:
+        ValueError: When more than one entity kind matches ``ref``.
+    """
+    matches: list[tuple[str, str]] = []
+    if layout.project_dir(root, ref).is_dir():
+        matches.append(("project", entity_node_id("project", ref)))
+    if layout.initiative_path(root, ref).is_file():
+        matches.append(("initiative", entity_node_id("initiative", ref)))
+    if (
+        layout.archived_initiative_path(root, ref).is_file()
+        and not layout.project_dir(root, ref).is_dir()
+    ):
+        matches.append(("initiative", entity_node_id("initiative", ref)))
+    if layout.milestone_path(root, ref).is_file():
+        matches.append(("milestone", entity_node_id("milestone", ref)))
+    if layout.goal_path(root, ref).is_file():
+        matches.append(("goal", entity_node_id("goal", ref)))
+    if len(matches) > 1:
+        kinds = ", ".join(kind for kind, _ in matches)
+        msg = f"ambiguous dependency reference {ref!r}: matches {kinds}"
+        raise ValueError(msg)
+    if len(matches) == 1:
+        return matches[0][1]
+    return ref
 
 
 def desired_nodes(roadmap: Roadmap) -> set[DesiredNode]:

@@ -20,22 +20,22 @@ def _write_fits_marker(root: Path) -> None:
 
 def test_create_initiative_calls_sync(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    sync_calls: list[bool] = []
+    sync_calls: list[tuple[str, str]] = []
 
-    def fake_sync(root: Path, *, prune: bool = False) -> Ok[None]:
-        sync_calls.append(prune)
+    def fake_sync(root: Path, kind: str, name: str) -> Ok[None]:
+        sync_calls.append((kind, name))
         return Ok(None)
 
     with (
         patch("bellman.cli.libfits_available", return_value=True),
-        patch("bellman.cli.sync_roadmap", side_effect=fake_sync),
+        patch("bellman.cli.sync_created_entity", side_effect=fake_sync),
     ):
         result = runner.invoke(
             app,
             ["create", "initiative", "my-init", "--path", str(tmp_path)],
         )
     assert result.exit_code == 0
-    assert sync_calls == [False]
+    assert sync_calls == [("initiative", "my-init")]
     assert "Graph sync passed." in result.output
 
 
@@ -44,7 +44,7 @@ def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
     with (
         patch("bellman.cli.libfits_available", return_value=True),
         patch(
-            "bellman.cli.sync_roadmap",
+            "bellman.cli.sync_created_entity",
             return_value=Err(FitsError("boom", code="test")),
         ),
     ):

@@ -20,6 +20,7 @@ from bellman.graph.desired import (
     flatten_wps,
     goal_node_id,
     milestone_node_id,
+    resolve_entity_ref_from_layout,
     resolve_scope_ref,
     resolve_wp_ref,
     scope_node_id,
@@ -35,7 +36,10 @@ from bellman.graph.history import load_graph_history
 from bellman.graph.legacy import is_legacy_flat_node_id
 from bellman.graph.links_file import reconcile_link_artifacts
 from bellman.graph.registry import bootstrap_registry
-from bellman.model import Initiative, Project, Roadmap
+from bellman.model import Goal, Initiative, Milestone, Project, Roadmap
+from bellman.parse.goal import parse_goal
+from bellman.parse.milestone import parse_milestone
+from bellman.parse.work_scope import parse_work_scope
 from bellman.roadmap import load
 
 
@@ -353,6 +357,190 @@ def prune_deleted_entity(
             removed = ignore_nothing_to_remove(repo.remove(Id(node_id)))
             if isinstance(removed, Err):
                 return removed
+
+        val = _validate_graph(repo, root)
+        if isinstance(val, Err):
+            return val
+    return Ok(None)
+
+
+_CREATE_ENTITY_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+
+
+def _parse_created_entity(
+    root: Path,
+    kind: str,
+    name: str,
+) -> Result[Initiative | Project | Milestone | Goal, FitsError]:
+    """Parse a single layout entity file for targeted graph sync."""
+    try:
+        if kind == "initiative":
+            path = layout.initiative_path(root, name)
+            initiative = parse_work_scope(path, is_project=False)
+            assert isinstance(initiative, Initiative)
+            return Ok(initiative)
+        elif kind == "project":
+            path = layout.project_md_path(root, name)
+            wp_path = layout.work_packages_path(root, name)
+            project = parse_work_scope(
+                path,
+                is_project=True,
+                work_packages_path=wp_path,
+            )
+            assert isinstance(project, Project)
+            return Ok(project)
+        elif kind == "milestone":
+            return Ok(parse_milestone(layout.milestone_path(root, name)))
+        elif kind == "goal":
+            return Ok(parse_goal(layout.goal_path(root, name)))
+        msg = f"unknown entity kind {kind!r}"
+        raise ValueError(msg)
+    except (ValueError, OSError) as exc:
+        return Err(FitsError(str(exc), code="entity_load_failed"))
+
+
+def _sync_scope_dependencies_layout(
+    repo: Repo,
+    graph: Graph,
+    root: Path,
+    scope: Initiative | Project,
+) -> Result[None, FitsError]:
+    """Ensure scope dependency links using filesystem entity resolution."""
+    sid = _scope_node_id(scope)
+    try:
+        for edge in scope.dependencies:
+            pred = Id(resolve_entity_ref_from_layout(root, edge.predecessor))
+            lt = f"{link_naming.precedes_link_type(edge.relation, edge.hardness)}_scope"
+            tid = link_naming.wire_target_id(lt, pred.value, sid.value)
+            link_res = _ensure_link(
+                repo,
+                graph,
+                link_type=lt,
+                in_id=pred,
+                out_id=sid,
+                target_id=tid,
+            )
+            if isinstance(link_res, Err):
+                return link_res
+    except ValueError as exc:
+        return Err(FitsError(str(exc), code="entity_load_failed"))
+    return Ok(None)
+
+
+def sync_created_entity(
+    root: Path,
+    kind: str,
+    name: str,
+) -> Result[None, FitsError]:
+    """Register a newly created layout entity in pyfits without full roadmap load.
+
+    Args:
+        root: Roadmap root directory.
+        kind: Entity kind (``initiative``, ``project``, ``milestone``, ``goal``).
+        name: Natural entity name (kebab-case).
+
+    Returns:
+        ``Ok(None)`` when the entity is registered and validation succeeds.
+        ``Err(FitsError)`` when libfits is unavailable, the repo is not
+        initialized, the entity file fails to parse, or sync fails.
+    """
+    if kind not in _CREATE_ENTITY_KINDS:
+        return Err(FitsError(f"unknown entity kind {kind!r}", code="invalid_entity"))
+    if not libfits_available():
+        return Err(
+            FitsError(
+                "libfits not available; set PYFITS_LIB_PATH or build ../fits",
+                code="lib_not_found",
+            )
+        )
+    if not (root / ".fits").is_dir():
+        return Err(
+            FitsError(
+                "Roadmap not initialized; run bellman init",
+                code="not_initialized",
+            )
+        )
+
+    parsed = _parse_created_entity(root, kind, name)
+    if isinstance(parsed, Err):
+        return parsed
+    entity = parsed.ok_value
+
+    open_result = Repo.open(root)
+    if isinstance(open_result, Err):
+        return open_result
+    repo = open_result.ok_value
+    with repo:
+        boot = bootstrap_registry(repo)
+        if isinstance(boot, Err):
+            return boot
+        graph_result = repo.output_graph()
+        if isinstance(graph_result, Err):
+            return graph_result
+        graph = graph_result.ok_value
+
+        if kind == "initiative":
+            initiative = entity
+            assert isinstance(initiative, Initiative)
+            ensured = _ensure_node(
+                repo,
+                graph,
+                type_name="initiative",
+                node_id=_scope_node_id(initiative),
+                title=initiative.title,
+            )
+            if isinstance(ensured, Err):
+                return ensured
+            dep_sync = _sync_scope_dependencies_layout(
+                repo,
+                graph,
+                root,
+                initiative,
+            )
+            if isinstance(dep_sync, Err):
+                return dep_sync
+        elif kind == "project":
+            project = entity
+            assert isinstance(project, Project)
+            ensured = _ensure_node(
+                repo,
+                graph,
+                type_name="project",
+                node_id=_scope_node_id(project),
+                title=project.title,
+            )
+            if isinstance(ensured, Err):
+                return ensured
+            wp_sync = _sync_project_wps(repo, graph, project)
+            if isinstance(wp_sync, Err):
+                return wp_sync
+            dep_sync = _sync_scope_dependencies_layout(repo, graph, root, project)
+            if isinstance(dep_sync, Err):
+                return dep_sync
+        elif kind == "milestone":
+            milestone = entity
+            assert isinstance(milestone, Milestone)
+            ensured = _ensure_node(
+                repo,
+                graph,
+                type_name="milestone",
+                node_id=_milestone_node_id(milestone.name),
+                title=milestone.title,
+            )
+            if isinstance(ensured, Err):
+                return ensured
+        else:
+            goal = entity
+            assert isinstance(goal, Goal)
+            ensured = _ensure_node(
+                repo,
+                graph,
+                type_name="goal",
+                node_id=_goal_node_id(goal.name),
+                title=goal.title,
+            )
+            if isinstance(ensured, Err):
+                return ensured
 
         val = _validate_graph(repo, root)
         if isinstance(val, Err):
