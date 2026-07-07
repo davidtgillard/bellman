@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from bellman.errors import BellmanLayoutError
@@ -27,6 +28,23 @@ WORK_PACKAGES_TEMPLATE = """version: 1
 
 work_packages: []
 """
+
+
+@dataclass(frozen=True, slots=True)
+class DeletedEntity:
+    """Entity removed by :func:`delete_entity`."""
+
+    kind: str
+    name: str
+    path: Path
+
+
+def _entity_name_from_path(kind: str, path: Path) -> str:
+    if kind == "project":
+        return path.name
+    if path.name.endswith(ARCHIVED_SUFFIX):
+        return path.name[: -len(ARCHIVED_SUFFIX)]
+    return path.stem
 
 
 _FITS_DIR = ".fits"
@@ -330,7 +348,7 @@ def find_entity(root: Path, name: str) -> tuple[str, Path]:
     return found[0]
 
 
-def delete_entity(root: Path, ref: str, *, force: bool = False) -> Path:
+def delete_entity(root: Path, ref: str, *, force: bool = False) -> DeletedEntity:
     """Delete an initiative, project, milestone, or goal.
 
     Args:
@@ -339,7 +357,7 @@ def delete_entity(root: Path, ref: str, *, force: bool = False) -> Path:
         force: Reserved for future dependency checks.
 
     Returns:
-        The deleted entity path.
+        Kind, natural name, and deleted path for the removed entity.
 
     Raises:
         BellmanLayoutError: When the entity cannot be resolved or deleted.
@@ -349,11 +367,12 @@ def delete_entity(root: Path, ref: str, *, force: bool = False) -> Path:
         kind, path = resolve_entity_path(root, ref)
     else:
         kind, path = find_entity(root, ref)
+    name = _entity_name_from_path(kind, path)
     if kind == "project":
         shutil.rmtree(path)
     else:
         path.unlink()
-    return path
+    return DeletedEntity(kind=kind, name=name, path=path)
 
 
 def promote_initiative(root: Path, raw_name: str) -> Path:

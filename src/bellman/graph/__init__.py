@@ -8,7 +8,12 @@ from bellman.graph.history import (
     TombstoneRecord,
     load_graph_history,
 )
-from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman.graph.sync import (
+    init_pyfits_repo,
+    libfits_available,
+    prune_deleted_entity,
+    sync_roadmap,
+)
 
 __all__ = [
     "GraphHistory",
@@ -19,5 +24,6 @@ __all__ = [
     "init_pyfits_repo",
     "libfits_available",
     "load_graph_history",
+    "prune_deleted_entity",
     "sync_roadmap",
 ]

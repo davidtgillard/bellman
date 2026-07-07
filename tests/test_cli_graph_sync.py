@@ -57,27 +57,27 @@ def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
     assert "Graph sync failed" in result.output
 
 
-def test_delete_calls_sync_with_prune(tmp_path: Path) -> None:
+def test_delete_calls_prune_deleted_entity(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout_dir = tmp_path / "goals"
     layout_dir.mkdir(parents=True)
     (layout_dir / "my-goal.md").write_text("# My Goal\n\nTBD.\n", encoding="utf-8")
-    sync_calls: list[bool] = []
+    prune_calls: list[tuple[str, str]] = []
 
-    def fake_sync(root: Path, *, prune: bool = False) -> Ok[None]:
-        sync_calls.append(prune)
+    def fake_prune(root: Path, kind: str, name: str) -> Ok[None]:
+        prune_calls.append((kind, name))
         return Ok(None)
 
     with (
         patch("bellman.cli.libfits_available", return_value=True),
-        patch("bellman.cli.sync_roadmap", side_effect=fake_sync),
+        patch("bellman.cli.prune_deleted_entity", side_effect=fake_prune),
     ):
         result = runner.invoke(
             app,
             ["delete", "my-goal", "--path", str(tmp_path)],
         )
     assert result.exit_code == 0
-    assert sync_calls == [True]
+    assert prune_calls == [("goal", "my-goal")]
 
 
 def test_create_without_libfits_skips_sync(tmp_path: Path) -> None:

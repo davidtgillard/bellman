@@ -9,7 +9,12 @@ from pyfits.result import Err, Ok
 
 from bellman import layout
 from bellman.graph.history import load_graph_history
-from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman.graph.sync import (
+    init_pyfits_repo,
+    libfits_available,
+    prune_deleted_entity,
+    sync_roadmap,
+)
 
 
 def _instance_type(root: Path, instance_id: str) -> str | None:
@@ -54,7 +59,7 @@ def test_delete_prunes_graph_node(tmp_path: Path) -> None:
     assert isinstance(sync_roadmap(tmp_path), Ok)
     assert _has_live_instance(tmp_path, "goal--my-goal")
     layout.delete_entity(tmp_path, "my-goal")
-    result = sync_roadmap(tmp_path, prune=True)
+    result = prune_deleted_entity(tmp_path, "goal", "my-goal")
     assert isinstance(result, Ok)
     assert not _has_live_instance(tmp_path, "goal--my-goal")
     history = load_graph_history(tmp_path)

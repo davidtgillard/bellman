@@ -251,6 +251,155 @@ def _prune_stale_graph(
     return Ok(graph)
 
 
+_ENTITY_KIND_TO_TYPE = {
+    "initiative": "initiative",
+    "archived-initiative": "initiative",
+    "project": "project",
+    "milestone": "milestone",
+    "goal": "goal",
+}
+
+
+def _deleted_node_ids(kind: str, name: str, root: Path) -> set[str]:
+    """Return opaque node ids to remove after deleting a layout entity."""
+    type_name = _ENTITY_KIND_TO_TYPE.get(kind)
+    if type_name is None:
+        msg = f"unknown entity kind {kind!r}"
+        raise ValueError(msg)
+
+    ids: set[str] = {entity_node_id(type_name, name), name}
+    history_result = load_graph_history(root)
+    if isinstance(history_result, Ok) and kind == "project":
+        prefix = f"{name}--"
+        for inst in history_result.ok_value.instances:
+            if inst.kind == "node" and inst.instance_id.startswith(prefix):
+                ids.add(inst.instance_id)
+    return ids
+
+
+def _remove_nodes_and_incident_links(
+    repo: Repo,
+    graph: Graph,
+    node_ids: set[str],
+) -> Result[Graph, FitsError]:
+    """Remove graph nodes and any links touching them."""
+    for node_id in node_ids:
+        if node_id not in _graph_node_ids(graph):
+            continue
+        removed = ignore_nothing_to_remove(repo.remove(Id(node_id)))
+        if isinstance(removed, Err):
+            return removed
+
+    reloaded = _reload_graph(repo)
+    if isinstance(reloaded, Err):
+        return reloaded
+    graph = reloaded.ok_value
+
+    stale_edges = [
+        edge
+        for edge in graph.edges
+        if edge.from_id.value in node_ids or edge.to_id.value in node_ids
+    ]
+    for edge in stale_edges:
+        link_id = edge.id
+        if link_id is None:
+            continue
+        removed = ignore_nothing_to_remove(repo.remove(link_id))
+        if isinstance(removed, Err):
+            return removed
+
+    if stale_edges:
+        reloaded = _reload_graph(repo)
+        if isinstance(reloaded, Err):
+            return reloaded
+        return Ok(reloaded.ok_value)
+    return Ok(graph)
+
+
+def _prune_registry_nodes(
+    repo: Repo,
+    root: Path,
+    node_ids: set[str],
+) -> Result[None, FitsError]:
+    """Remove registry node instances for ``node_ids`` not already gone."""
+    history_result = load_graph_history(root)
+    if isinstance(history_result, Err):
+        return Ok(None)
+    for inst in history_result.ok_value.instances:
+        if inst.kind != "node" or inst.instance_id not in node_ids:
+            continue
+        removed = ignore_nothing_to_remove(repo.remove(Id(inst.instance_id)))
+        if isinstance(removed, Err):
+            return removed
+    return Ok(None)
+
+
+def prune_deleted_entity(
+    root: Path,
+    kind: str,
+    name: str,
+) -> Result[None, FitsError]:
+    """Remove a deleted layout entity from the pyfits graph without full roadmap load.
+
+    Args:
+        root: Roadmap root directory.
+        kind: Entity kind from :func:`bellman.layout.delete_entity`
+            (e.g. ``initiative``, ``project``, ``goal``).
+        name: Natural entity name (kebab-case).
+
+    Returns:
+        ``Ok(None)`` when pruning and libfits validation succeed.
+        ``Err(FitsError)`` when libfits is unavailable, the repo is not
+        initialized, or pruning fails.
+    """
+    if not libfits_available():
+        return Err(
+            FitsError(
+                "libfits not available; set PYFITS_LIB_PATH or build ../fits",
+                code="lib_not_found",
+            )
+        )
+    if not (root / ".fits").is_dir():
+        return Err(
+            FitsError(
+                "Roadmap not initialized; run bellman init",
+                code="not_initialized",
+            )
+        )
+
+    try:
+        node_ids = _deleted_node_ids(kind, name, root)
+    except ValueError as exc:
+        return Err(FitsError(str(exc), code="invalid_entity"))
+
+    open_result = Repo.open(root)
+    if isinstance(open_result, Err):
+        return open_result
+    repo = open_result.ok_value
+    with repo:
+        boot = bootstrap_registry(repo)
+        if isinstance(boot, Err):
+            return boot
+
+        registry_pruned = _prune_registry_nodes(repo, root, node_ids)
+        if isinstance(registry_pruned, Err):
+            return registry_pruned
+
+        graph_result = repo.output_graph()
+        if isinstance(graph_result, Err):
+            return graph_result
+        graph = graph_result.ok_value
+
+        pruned = _remove_nodes_and_incident_links(repo, graph, node_ids)
+        if isinstance(pruned, Err):
+            return pruned
+
+        val = repo.validate()
+        if isinstance(val, Err):
+            return val
+    return Ok(None)
+
+
 def _ensure_node(
     repo: Repo,
     graph: Graph,
@@ -435,7 +584,7 @@ def sync_roadmap(
     Returns:
         ``Ok(None)`` when sync and libfits validation succeed.
         ``Err(FitsError)`` when libfits is unavailable, the repo is not
-        initialized, or sync/validation fails.
+        initialized, roadmap load fails, or sync/validation fails.
     """
     if not libfits_available():
         return Err(
@@ -451,7 +600,10 @@ def sync_roadmap(
                 code="not_initialized",
             )
         )
-    roadmap = load(root)
+    try:
+        roadmap = load(root)
+    except (ValueError, OSError) as exc:
+        return Err(FitsError(str(exc), code="roadmap_load_failed"))
     open_result = Repo.open(root)
     if isinstance(open_result, Err):
         return open_result

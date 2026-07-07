@@ -18,7 +18,12 @@ from bellman.graph.delta import (
     RegistryDeltaError,
     compute_registry_delta,
 )
-from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
+from bellman.graph.sync import (
+    init_pyfits_repo,
+    libfits_available,
+    prune_deleted_entity,
+    sync_roadmap,
+)
 from bellman.model import Roadmap
 from bellman.plugin.cli import register_plugin_command
 from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
@@ -54,6 +59,18 @@ def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
         typer.echo("Note: libfits not found; graph not updated.", err=True)
         return
     result = sync_roadmap(root, prune=prune)
+    if isinstance(result, Err):
+        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Graph sync passed.")
+
+
+def _apply_deleted_entity_prune(root: Path, kind: str, name: str) -> None:
+    """Prune a deleted entity from pyfits without loading the full roadmap."""
+    if not libfits_available():
+        typer.echo("Note: libfits not found; graph not updated.", err=True)
+        return
+    result = prune_deleted_entity(root, kind, name)
     if isinstance(result, Err):
         typer.echo(f"Graph sync failed: {result.err_value}", err=True)
         raise typer.Exit(code=1)
@@ -250,11 +267,11 @@ def delete(
     root = _root(path)
     try:
         deleted = layout.delete_entity(root, name, force=force)
-        typer.echo(f"Deleted {deleted.relative_to(root)}")
+        typer.echo(f"Deleted {deleted.path.relative_to(root)}")
     except BellmanLayoutError as exc:
         typer.echo(exc.message, err=True)
         raise typer.Exit(code=1) from exc
-    _apply_graph_sync(root, prune=True)
+    _apply_deleted_entity_prune(root, deleted.kind, deleted.name)
 
 
 @app.command()
