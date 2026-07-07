@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 
-from pyfits import Id, ObjectTypeName, Repo, TargetId
+from pyfits import Id, ObjectTypeName, Repo, TargetId, ValidateResult
 from pyfits._native import load_library
 from pyfits.errors import FitsError
 from pyfits.models import Graph
@@ -33,6 +33,7 @@ from bellman.graph.fits_errors import (
 )
 from bellman.graph.history import load_graph_history
 from bellman.graph.legacy import is_legacy_flat_node_id
+from bellman.graph.links_file import reconcile_link_artifacts
 from bellman.graph.registry import bootstrap_registry
 from bellman.model import Initiative, Project, Roadmap
 from bellman.roadmap import load
@@ -203,15 +204,35 @@ def _prune_stale_graph(
     graph: Graph,
     desired: set[str],
 ) -> Result[Graph, FitsError]:
-    """Remove stale nodes from the registry and graph snapshot."""
-    pruned = _prune_stale_registry(repo, root, desired)
-    if isinstance(pruned, Err):
-        return pruned
-    reloaded = _reload_graph(repo)
-    if isinstance(reloaded, Err):
-        return reloaded
-    graph = reloaded.ok_value
+    """Remove stale links and nodes from the registry and graph snapshot."""
+    stale_edges = [
+        edge
+        for edge in graph.edges
+        if edge.from_id.value not in desired or edge.to_id.value not in desired
+    ]
+    for edge in stale_edges:
+        link_id = edge.id
+        if link_id is None:
+            continue
+        removed = ignore_nothing_to_remove(repo.remove(link_id))
+        if isinstance(removed, Err):
+            return removed
+    if stale_edges:
+        reloaded = _reload_graph(repo)
+        if isinstance(reloaded, Err):
+            return reloaded
+        graph = reloaded.ok_value
+
     stale_nodes = [n for n in graph.nodes if n.id.value not in desired]
+    stale_node_ids = {node.id.value for node in stale_nodes}
+    if stale_node_ids:
+        reconciled = reconcile_link_artifacts(
+            root,
+            drop_touching_nodes=stale_node_ids,
+        )
+        if isinstance(reconciled, Err):
+            return reconciled
+
     for node in stale_nodes:
         removed = ignore_nothing_to_remove(repo.remove(node.id))
         _debug_log(
@@ -226,24 +247,16 @@ def _prune_stale_graph(
         )
         if isinstance(removed, Err):
             return removed
-    if stale_nodes:
-        reloaded = _reload_graph(repo)
-        if isinstance(reloaded, Err):
-            return reloaded
-        graph = reloaded.ok_value
-    stale_edges = [
-        edge
-        for edge in graph.edges
-        if edge.from_id.value not in desired or edge.to_id.value not in desired
-    ]
-    for edge in stale_edges:
-        link_id = edge.id
-        if link_id is None:
-            continue
-        removed = ignore_nothing_to_remove(repo.remove(link_id))
-        if isinstance(removed, Err):
-            return removed
-    if stale_edges:
+
+    registry_pruned = _prune_stale_registry(repo, root, desired)
+    if isinstance(registry_pruned, Err):
+        return registry_pruned
+
+    repaired = reconcile_link_artifacts(root)
+    if isinstance(repaired, Err):
+        return repaired
+
+    if stale_nodes or stale_edges:
         reloaded = _reload_graph(repo)
         if isinstance(reloaded, Err):
             return reloaded
@@ -277,61 +290,12 @@ def _deleted_node_ids(kind: str, name: str, root: Path) -> set[str]:
     return ids
 
 
-def _remove_nodes_and_incident_links(
-    repo: Repo,
-    graph: Graph,
-    node_ids: set[str],
-) -> Result[Graph, FitsError]:
-    """Remove graph nodes and any links touching them."""
-    for node_id in node_ids:
-        if node_id not in _graph_node_ids(graph):
-            continue
-        removed = ignore_nothing_to_remove(repo.remove(Id(node_id)))
-        if isinstance(removed, Err):
-            return removed
-
-    reloaded = _reload_graph(repo)
-    if isinstance(reloaded, Err):
-        return reloaded
-    graph = reloaded.ok_value
-
-    stale_edges = [
-        edge
-        for edge in graph.edges
-        if edge.from_id.value in node_ids or edge.to_id.value in node_ids
-    ]
-    for edge in stale_edges:
-        link_id = edge.id
-        if link_id is None:
-            continue
-        removed = ignore_nothing_to_remove(repo.remove(link_id))
-        if isinstance(removed, Err):
-            return removed
-
-    if stale_edges:
-        reloaded = _reload_graph(repo)
-        if isinstance(reloaded, Err):
-            return reloaded
-        return Ok(reloaded.ok_value)
-    return Ok(graph)
-
-
-def _prune_registry_nodes(
-    repo: Repo,
-    root: Path,
-    node_ids: set[str],
-) -> Result[None, FitsError]:
-    """Remove registry node instances for ``node_ids`` not already gone."""
-    history_result = load_graph_history(root)
-    if isinstance(history_result, Err):
-        return Ok(None)
-    for inst in history_result.ok_value.instances:
-        if inst.kind != "node" or inst.instance_id not in node_ids:
-            continue
-        removed = ignore_nothing_to_remove(repo.remove(Id(inst.instance_id)))
-        if isinstance(removed, Err):
-            return removed
-    return Ok(None)
+def _validate_graph(repo: Repo, root: Path) -> Result[ValidateResult, FitsError]:
+    """Validate the repository after reconciling link artifacts."""
+    repaired = reconcile_link_artifacts(root)
+    if isinstance(repaired, Err):
+        return repaired
+    return repo.validate()
 
 
 def prune_deleted_entity(
@@ -372,6 +336,10 @@ def prune_deleted_entity(
     except ValueError as exc:
         return Err(FitsError(str(exc), code="invalid_entity"))
 
+    reconciled = reconcile_link_artifacts(root, drop_touching_nodes=node_ids)
+    if isinstance(reconciled, Err):
+        return reconciled
+
     open_result = Repo.open(root)
     if isinstance(open_result, Err):
         return open_result
@@ -381,20 +349,12 @@ def prune_deleted_entity(
         if isinstance(boot, Err):
             return boot
 
-        registry_pruned = _prune_registry_nodes(repo, root, node_ids)
-        if isinstance(registry_pruned, Err):
-            return registry_pruned
+        for node_id in node_ids:
+            removed = ignore_nothing_to_remove(repo.remove(Id(node_id)))
+            if isinstance(removed, Err):
+                return removed
 
-        graph_result = repo.output_graph()
-        if isinstance(graph_result, Err):
-            return graph_result
-        graph = graph_result.ok_value
-
-        pruned = _remove_nodes_and_incident_links(repo, graph, node_ids)
-        if isinstance(pruned, Err):
-            return pruned
-
-        val = repo.validate()
+        val = _validate_graph(repo, root)
         if isinstance(val, Err):
             return val
     return Ok(None)
@@ -710,7 +670,7 @@ def sync_roadmap(
                 return pruned
             graph = pruned.ok_value
 
-        val = repo.validate()
+        val = _validate_graph(repo, root)
         if isinstance(val, Err):
             return val
     _debug_log(

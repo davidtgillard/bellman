@@ -1,0 +1,168 @@
+"""Repair ``links/links.jsonc`` against ``.fits/registry.json``."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+from pyfits.errors import FitsError
+from pyfits.result import Err, Ok, Result
+
+_REGISTRY_PATH = Path(".fits") / "registry.json"
+_LINKS_PATH = Path("links") / "links.jsonc"
+_JSONC_COMMENT_RE = re.compile(r"//.*?$", re.MULTILINE)
+
+
+def _load_jsonc(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    cleaned = _JSONC_COMMENT_RE.sub("", text)
+    data = json.loads(cleaned)
+    if not isinstance(data, dict):
+        msg = f"links file must be a JSON object: {path}"
+        raise ValueError(msg)
+    return data
+
+
+def _registered_ids(registry: dict[str, Any]) -> set[str]:
+    instances = registry.get("instances", [])
+    if not isinstance(instances, list):
+        return set()
+    return {
+        inst["id"]
+        for inst in instances
+        if isinstance(inst, dict) and isinstance(inst.get("id"), str)
+    }
+
+
+def _registered_node_ids(registry: dict[str, Any]) -> set[str]:
+    instances = registry.get("instances", [])
+    if not isinstance(instances, list):
+        return set()
+    return {
+        inst["id"]
+        for inst in instances
+        if (
+            isinstance(inst, dict)
+            and inst.get("kind") == "node"
+            and isinstance(inst.get("id"), str)
+        )
+    }
+
+
+def _link_is_valid(
+    link: dict[str, Any],
+    *,
+    registered: set[str],
+    node_ids: set[str],
+    drop_touching_nodes: set[str],
+) -> bool:
+    link_id = link.get("id")
+    in_id = link.get("in")
+    out_id = link.get("out")
+    if not isinstance(link_id, str):
+        return False
+    if not isinstance(in_id, str) or not isinstance(out_id, str):
+        return False
+    if link_id not in registered:
+        return False
+    if in_id not in node_ids or out_id not in node_ids:
+        return False
+    if in_id in drop_touching_nodes or out_id in drop_touching_nodes:
+        return False
+    return True
+
+
+def reconcile_link_artifacts(
+    root: Path,
+    *,
+    drop_touching_nodes: set[str] | None = None,
+) -> Result[int, FitsError]:
+    """Drop invalid ``links.jsonc`` rows and stale link registry instances.
+
+    Removes links when:
+    - the link id is not registered in ``instances[]``
+    - either endpoint is not a registered node instance
+    - either endpoint is listed in ``drop_touching_nodes``
+
+    Args:
+        root: Roadmap root directory.
+        drop_touching_nodes: Optional node ids whose incident links should be removed.
+
+    Returns:
+        ``Ok(count)`` with the number of removed link rows (jsonc + registry).
+        ``Err(FitsError)`` when artifacts cannot be read or written.
+    """
+    registry_path = root / _REGISTRY_PATH
+    links_path = root / _LINKS_PATH
+    if not registry_path.is_file() or not links_path.is_file():
+        return Ok(0)
+
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        links_doc = _load_jsonc(links_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return Err(FitsError(str(exc), code="links_reconcile_failed"))
+
+    links = links_doc.get("links", [])
+    if not isinstance(links, list):
+        return Err(
+            FitsError("links file missing links array", code="links_reconcile_failed")
+        )
+
+    registered = _registered_ids(registry)
+    node_ids = _registered_node_ids(registry)
+    touching = drop_touching_nodes or set()
+
+    kept_links: list[dict[str, Any]] = []
+    for item in links:
+        if not isinstance(item, dict):
+            continue
+        if _link_is_valid(
+            item,
+            registered=registered,
+            node_ids=node_ids,
+            drop_touching_nodes=touching,
+        ):
+            kept_links.append(item)
+
+    kept_link_ids = {
+        link["id"] for link in kept_links if isinstance(link.get("id"), str)
+    }
+    removed_links = len(links) - len(kept_links)
+
+    instances = registry.get("instances", [])
+    if not isinstance(instances, list):
+        instances = []
+
+    kept_instances: list[dict[str, Any]] = []
+    removed_registry = 0
+    for inst in instances:
+        if not isinstance(inst, dict):
+            continue
+        if inst.get("kind") == "link" and inst.get("id") not in kept_link_ids:
+            removed_registry += 1
+            continue
+        kept_instances.append(inst)
+
+    removed = removed_links + removed_registry
+    if removed == 0:
+        return Ok(0)
+
+    links_doc["links"] = kept_links
+    registry["instances"] = kept_instances
+
+    try:
+        links_path.write_text(
+            json.dumps(links_doc, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        registry_path.write_text(
+            json.dumps(registry, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        return Err(FitsError(str(exc), code="links_reconcile_failed"))
+
+    return Ok(removed)
