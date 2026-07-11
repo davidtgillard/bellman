@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,36 @@ class DeletedEntity:
     kind: str
     name: str
     path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class RenamedEntity:
+    """Entity renamed by :func:`rename_entity`."""
+
+    kind: str
+    old_name: str
+    new_name: str
+    path: Path
+
+
+_RENAMEABLE_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+
+_SCOPE_DEPENDENCY_RE = re.compile(
+    r"^(\s*-\s+after:\s*)(?P<predecessor>\S+)(\s*"
+    r"\[(?:FF|FS|SF|SS),\s*(?:Mandatory|Discretionary|Optional)\]\s*)$"
+)
+
+_WP_DEPENDENCY_LINE_RE = re.compile(
+    r"^(\s*-\s+after:\s*)(?P<predecessor>\S+)(\s*"
+    r"\[(?:FF|FS|SF|SS),\s*(?:Mandatory|Discretionary|Optional)\]\s*)$"
+)
+
+_WP_DEPENDENCY_INLINE_RE = re.compile(
+    r"^(\s*after:\s*)(?P<predecessor>\S+)(\s*"
+    r"\[(?:FF|FS|SF|SS),\s*(?:Mandatory|Discretionary|Optional)\]\s*)$"
+)
+
+_WP_DEPENDENCY_DICT_AFTER_RE = re.compile(r"^(\s*after:\s*)(?P<predecessor>\S+)(\s*)$")
 
 
 def _entity_name_from_path(kind: str, path: Path) -> str:
@@ -346,6 +377,252 @@ def find_entity(root: Path, name: str) -> tuple[str, Path]:
         msg = f"ambiguous name {name!r}: matches {kinds}"
         raise BellmanLayoutError(msg)
     return found[0]
+
+
+def find_entity_by_kind(root: Path, kind: str, name: str) -> tuple[str, Path]:
+    """Locate an entity by explicit kind and natural name.
+
+    Args:
+        root: Roadmap root directory.
+        kind: Entity kind (``initiative``, ``project``, ``milestone``, ``goal``).
+        name: Natural entity name (kebab-case).
+
+    Returns:
+        Resolved kind string and filesystem path.
+
+    Raises:
+        BellmanLayoutError: When ``kind`` is unknown or no matching entity exists.
+    """
+    if kind not in _RENAMEABLE_KINDS:
+        kinds = ", ".join(sorted(_RENAMEABLE_KINDS))
+        msg = f"unknown entity kind {kind!r}; expected one of: {kinds}"
+        raise BellmanLayoutError(msg)
+    validate_kebab(name)
+    if kind == "project":
+        path = project_dir(root, name)
+        if not path.is_dir():
+            msg = f"no project named {name!r} in roadmap at {root}"
+            raise BellmanLayoutError(msg)
+        return "project", path
+    if kind == "initiative":
+        path = initiative_path(root, name)
+        if path.is_file():
+            return "initiative", path
+        msg = f"no initiative named {name!r} in roadmap at {root}"
+        raise BellmanLayoutError(msg)
+    if kind == "milestone":
+        path = milestone_path(root, name)
+        if path.is_file():
+            return "milestone", path
+        msg = f"no milestone named {name!r} in roadmap at {root}"
+        raise BellmanLayoutError(msg)
+    path = goal_path(root, name)
+    if path.is_file():
+        return "goal", path
+    msg = f"no goal named {name!r} in roadmap at {root}"
+    raise BellmanLayoutError(msg)
+
+
+def _destination_exists(root: Path, kind: str, name: str) -> bool:
+    if kind == "project":
+        return project_dir(root, name).exists()
+    if kind == "archived-initiative":
+        return archived_initiative_path(root, name).exists()
+    if kind == "initiative":
+        return initiative_path(root, name).exists()
+    if kind == "milestone":
+        return milestone_path(root, name).exists()
+    return goal_path(root, name).exists()
+
+
+def _rewrite_predecessor_ref(predecessor: str, old_name: str, new_name: str) -> str:
+    project_prefix = f"{old_name}/"
+    if predecessor == old_name:
+        return new_name
+    if predecessor.startswith(project_prefix):
+        return f"{new_name}/{predecessor[len(project_prefix) :]}"
+    return predecessor
+
+
+def _rewrite_scope_dependency_line(
+    line: str,
+    *,
+    old_name: str,
+    new_name: str,
+) -> str:
+    match = _SCOPE_DEPENDENCY_RE.match(line)
+    if match is None:
+        return line
+    predecessor = match.group("predecessor")
+    updated = _rewrite_predecessor_ref(predecessor, old_name, new_name)
+    if updated == predecessor:
+        return line
+    return f"{match.group(1)}{updated}{match.group(3)}"
+
+
+def _rewrite_work_packages_line(
+    line: str,
+    *,
+    old_name: str,
+    new_name: str,
+) -> str:
+    for pattern in (
+        _WP_DEPENDENCY_LINE_RE,
+        _WP_DEPENDENCY_INLINE_RE,
+        _WP_DEPENDENCY_DICT_AFTER_RE,
+    ):
+        match = pattern.match(line)
+        if match is None:
+            continue
+        predecessor = match.group("predecessor")
+        updated = _rewrite_predecessor_ref(predecessor, old_name, new_name)
+        if updated == predecessor:
+            return line
+        return f"{match.group(1)}{updated}{match.group(3)}"
+    return line
+
+
+def _rewrite_dependency_refs(root: Path, *, old_name: str, new_name: str) -> None:
+    initiatives_dir = root / INITIATIVES_DIR
+    if initiatives_dir.is_dir():
+        for path in initiatives_dir.glob("*.md"):
+            text = path.read_text(encoding="utf-8")
+            lines = [
+                _rewrite_scope_dependency_line(
+                    line,
+                    old_name=old_name,
+                    new_name=new_name,
+                )
+                for line in text.splitlines(keepends=True)
+            ]
+            path.write_text("".join(lines), encoding="utf-8")
+
+    projects_dir = root / PROJECTS_DIR
+    if projects_dir.is_dir():
+        for pdir in projects_dir.iterdir():
+            if not pdir.is_dir():
+                continue
+            md_path = pdir / f"{pdir.name}.md"
+            if md_path.is_file():
+                text = md_path.read_text(encoding="utf-8")
+                lines = [
+                    _rewrite_scope_dependency_line(
+                        line,
+                        old_name=old_name,
+                        new_name=new_name,
+                    )
+                    for line in text.splitlines(keepends=True)
+                ]
+                md_path.write_text("".join(lines), encoding="utf-8")
+            wp_path = pdir / "work-packages.yaml"
+            if wp_path.is_file():
+                text = wp_path.read_text(encoding="utf-8")
+                lines = [
+                    _rewrite_work_packages_line(
+                        line,
+                        old_name=old_name,
+                        new_name=new_name,
+                    )
+                    for line in text.splitlines(keepends=True)
+                ]
+                wp_path.write_text("".join(lines), encoding="utf-8")
+
+
+def _update_goal_heading(path: Path, new_name: str) -> None:
+    title = new_name.replace("-", " ").title()
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if line.startswith("# "):
+            lines[index] = f"# {title}\n"
+            break
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def _move_markdown_entity(path: Path, new_path: Path) -> None:
+    if new_path.exists():
+        msg = f"entity already exists: {new_path}"
+        raise BellmanLayoutError(msg)
+    path.rename(new_path)
+
+
+def _rename_project(root: Path, old_name: str, new_name: str) -> Path:
+    old_dir = project_dir(root, old_name)
+    new_dir = project_dir(root, new_name)
+    if new_dir.exists():
+        msg = f"project already exists: {new_dir}"
+        raise BellmanLayoutError(msg)
+    old_dir.rename(new_dir)
+    old_md = new_dir / f"{old_name}.md"
+    new_md = project_md_path(root, new_name)
+    if old_md.exists():
+        old_md.rename(new_md)
+    return new_dir
+
+
+def rename_entity(
+    root: Path,
+    old_ref: str,
+    raw_new_name: str,
+    *,
+    kind: str | None = None,
+) -> RenamedEntity:
+    """Rename an initiative, project, milestone, or goal.
+
+    Args:
+        root: Roadmap root directory.
+        old_ref: Natural entity name or layout-relative path (e.g. ``goals/foo.md``).
+        raw_new_name: New natural name (kebab-case).
+        kind: When set, resolve ``old_ref`` as that entity kind only.
+
+    Returns:
+        Kind, old and new names, and the renamed entity path.
+
+    Raises:
+        BellmanLayoutError: When the entity cannot be resolved, the destination
+            exists, or the rename fails.
+        ValueError: When ``raw_new_name`` is not valid kebab-case.
+    """
+    new_name = normalize_entity_name(raw_new_name)
+    if kind is None:
+        if _is_path_shaped_ref(old_ref):
+            resolved_kind, path = resolve_entity_path(root, old_ref)
+        else:
+            resolved_kind, path = find_entity(root, old_ref)
+    else:
+        old_name = normalize_entity_name(old_ref)
+        resolved_kind, path = find_entity_by_kind(root, kind, old_name)
+    old_name = _entity_name_from_path(resolved_kind, path)
+    if old_name == new_name:
+        msg = f"entity already named {new_name!r}"
+        raise BellmanLayoutError(msg)
+    if _destination_exists(root, resolved_kind, new_name):
+        msg = f"{resolved_kind} already exists: {new_name!r}"
+        raise BellmanLayoutError(msg)
+
+    if resolved_kind == "project":
+        new_path = _rename_project(root, old_name, new_name)
+    elif resolved_kind == "archived-initiative":
+        new_path = archived_initiative_path(root, new_name)
+        _move_markdown_entity(path, new_path)
+    elif resolved_kind == "initiative":
+        new_path = initiative_path(root, new_name)
+        _move_markdown_entity(path, new_path)
+    elif resolved_kind == "milestone":
+        new_path = milestone_path(root, new_name)
+        _move_markdown_entity(path, new_path)
+    else:
+        new_path = goal_path(root, new_name)
+        _move_markdown_entity(path, new_path)
+        _update_goal_heading(new_path, new_name)
+
+    _rewrite_dependency_refs(root, old_name=old_name, new_name=new_name)
+    return RenamedEntity(
+        kind=resolved_kind,
+        old_name=old_name,
+        new_name=new_name,
+        path=new_path,
+    )
 
 
 def delete_entity(root: Path, ref: str, *, force: bool = False) -> DeletedEntity:

@@ -294,6 +294,12 @@ def _deleted_node_ids(kind: str, name: str, root: Path) -> set[str]:
     return ids
 
 
+def _rename_graph_kind(kind: str) -> str:
+    if kind == "archived-initiative":
+        return "initiative"
+    return kind
+
+
 def _validate_graph(repo: Repo, root: Path) -> Result[ValidateResult, FitsError]:
     """Validate the repository after reconciling link artifacts."""
     repaired = reconcile_link_artifacts(root)
@@ -425,6 +431,133 @@ def _sync_scope_dependencies_layout(
     except ValueError as exc:
         return Err(FitsError(str(exc), code="entity_load_failed"))
     return Ok(None)
+
+
+def sync_renamed_entity(
+    root: Path,
+    kind: str,
+    old_name: str,
+    new_name: str,
+) -> Result[None, FitsError]:
+    """Rename layout entity instances in pyfits and refresh dependency links.
+
+    Args:
+        root: Roadmap root directory.
+        kind: Entity kind from :func:`bellman.layout.rename_entity`.
+        old_name: Previous natural entity name (kebab-case).
+        new_name: New natural entity name (kebab-case).
+
+    Returns:
+        ``Ok(None)`` when renames and validation succeed.
+        ``Err(FitsError)`` when libfits is unavailable, the repo is not
+        initialized, or sync fails.
+    """
+    type_name = _ENTITY_KIND_TO_TYPE.get(kind)
+    if type_name is None:
+        return Err(FitsError(f"unknown entity kind {kind!r}", code="invalid_entity"))
+    if not libfits_available():
+        return Err(
+            FitsError(
+                "libfits not available; set PYFITS_LIB_PATH or build ../fits",
+                code="lib_not_found",
+            )
+        )
+    if not (root / ".fits").is_dir():
+        return Err(
+            FitsError(
+                "Roadmap not initialized; run bellman init",
+                code="not_initialized",
+            )
+        )
+
+    renames: list[tuple[str, str]] = [
+        (entity_node_id(type_name, old_name), entity_node_id(type_name, new_name)),
+        (old_name, entity_node_id(type_name, new_name)),
+    ]
+    if kind == "project":
+        renames.extend(_project_wp_node_renames(root, old_name, new_name))
+
+    open_result = Repo.open(root)
+    if isinstance(open_result, Err):
+        return open_result
+    repo = open_result.ok_value
+    with repo:
+        boot = bootstrap_registry(repo)
+        if isinstance(boot, Err):
+            return boot
+
+        history_result = load_graph_history(root)
+        live_node_ids: set[str] = set()
+        if isinstance(history_result, Ok):
+            live_node_ids = {
+                inst.instance_id
+                for inst in history_result.ok_value.instances
+                if inst.kind == "node"
+            }
+
+        seen_old: set[str] = set()
+        for old_id, new_id in renames:
+            if old_id in seen_old or old_id == new_id:
+                continue
+            seen_old.add(old_id)
+            if old_id not in live_node_ids:
+                continue
+            renamed = repo.rename_instance(Id(old_id), Id(new_id))
+            if isinstance(renamed, Err):
+                return renamed
+            live_node_ids.discard(old_id)
+            live_node_ids.add(new_id)
+
+        sync_kind = _rename_graph_kind(kind)
+        if kind in _CREATE_ENTITY_KINDS:
+            resync = sync_created_entity(root, sync_kind, new_name)
+            if isinstance(resync, Err):
+                return resync
+
+        val = _validate_graph(repo, root)
+        if isinstance(val, Err):
+            return val
+    return Ok(None)
+
+
+def _project_wp_node_renames(
+    root: Path,
+    old_name: str,
+    new_name: str,
+) -> list[tuple[str, str]]:
+    """Return work-package instance id renames after a project rename."""
+    renames: list[tuple[str, str]] = []
+    wp_path = layout.work_packages_path(root, new_name)
+    if wp_path.is_file():
+        try:
+            project = parse_work_scope(
+                layout.project_md_path(root, new_name),
+                is_project=True,
+                work_packages_path=wp_path,
+            )
+            assert isinstance(project, Project)
+            for wp, _parent in flatten_wps(project.work_packages, None, project.name):
+                renames.append(
+                    (
+                        wp_node_id(old_name, wp.slug),
+                        wp_node_id(new_name, wp.slug),
+                    )
+                )
+        except (ValueError, OSError):
+            pass
+
+    history_result = load_graph_history(root)
+    if isinstance(history_result, Ok):
+        prefix = f"{old_name}--"
+        known_old = {old for old, _new in renames}
+        for inst in history_result.ok_value.instances:
+            if inst.kind != "node" or not inst.instance_id.startswith(prefix):
+                continue
+            if inst.instance_id in known_old:
+                continue
+            slug = inst.instance_id[len(prefix) :]
+            renames.append((inst.instance_id, wp_node_id(new_name, slug)))
+    return renames
 
 
 def sync_created_entity(

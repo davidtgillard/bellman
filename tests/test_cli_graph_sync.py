@@ -9,6 +9,7 @@ from pyfits.errors import FitsError
 from pyfits.result import Err, Ok
 from typer.testing import CliRunner
 
+from bellman import layout
 from bellman.cli import app
 
 runner = CliRunner()
@@ -90,3 +91,57 @@ def test_create_without_libfits_skips_sync(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "libfits not found" in result.output
     assert "Graph sync passed." not in result.output
+
+
+def test_rename_bare_calls_sync_renamed_entity(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout_dir = tmp_path / "goals"
+    layout_dir.mkdir(parents=True)
+    (layout_dir / "old-goal.md").write_text("# Old Goal\n\nTBD.\n", encoding="utf-8")
+    sync_calls: list[tuple[str, str, str]] = []
+
+    def fake_sync(root: Path, kind: str, old_name: str, new_name: str) -> Ok[None]:
+        sync_calls.append((kind, old_name, new_name))
+        return Ok(None)
+
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch("bellman.cli.sync_renamed_entity", side_effect=fake_sync),
+    ):
+        result = runner.invoke(
+            app,
+            ["rename", "old-goal", "new-goal", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert sync_calls == [("goal", "old-goal", "new-goal")]
+    assert (layout_dir / "new-goal.md").is_file()
+    assert "Graph sync passed." in result.output
+
+
+def test_rename_typed_goal(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_goal(tmp_path, "system-mci")
+    layout.create_initiative(tmp_path, "system-mci")
+    with patch("bellman.cli.libfits_available", return_value=False):
+        result = runner.invoke(
+            app,
+            ["rename", "goal", "system-mci", "renamed-goal", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert layout.goal_path(tmp_path, "renamed-goal").is_file()
+    assert layout.initiative_path(tmp_path, "system-mci").is_file()
+
+
+def test_rename_ambiguous_shows_hint(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_goal(tmp_path, "system-mci")
+    layout.create_initiative(tmp_path, "system-mci")
+    result = runner.invoke(
+        app,
+        ["rename", "system-mci", "renamed", "--path", str(tmp_path)],
+    )
+    assert result.exit_code == 1
+    assert "ambiguous name" in result.output
+    assert "bellman rename <kind>" in result.output

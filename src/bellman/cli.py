@@ -23,6 +23,7 @@ from bellman.graph.sync import (
     libfits_available,
     prune_deleted_entity,
     sync_created_entity,
+    sync_renamed_entity,
     sync_roadmap,
 )
 from bellman.model import Roadmap
@@ -88,6 +89,51 @@ def _apply_deleted_entity_prune(root: Path, kind: str, name: str) -> None:
         typer.echo(f"Graph sync failed: {result.err_value}", err=True)
         raise typer.Exit(code=1)
     typer.echo("Graph sync passed.")
+
+
+def _apply_renamed_entity_sync(
+    root: Path,
+    kind: str,
+    old_name: str,
+    new_name: str,
+) -> None:
+    """Rename a layout entity in pyfits after a filesystem rename."""
+    if not libfits_available():
+        typer.echo("Note: libfits not found; graph not updated.", err=True)
+        return
+    result = sync_renamed_entity(root, kind, old_name, new_name)
+    if isinstance(result, Err):
+        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("Graph sync passed.")
+
+
+def _run_rename(
+    old_ref: str,
+    new_name: str,
+    *,
+    path: Path | None,
+    kind: str | None = None,
+) -> None:
+    root = _root(path)
+    try:
+        renamed = layout.rename_entity(root, old_ref, new_name, kind=kind)
+        typer.echo(f"Renamed {renamed.path.relative_to(root)}")
+    except (BellmanLayoutError, ValueError) as exc:
+        message = exc.message if isinstance(exc, BellmanLayoutError) else str(exc)
+        if isinstance(exc, BellmanLayoutError) and message.startswith("ambiguous name"):
+            message = (
+                f"{message}; use: bellman rename <kind> <old> <new> "
+                "(kind is initiative, project, milestone, or goal)"
+            )
+        typer.echo(message, err=True)
+        raise typer.Exit(code=1) from exc
+    _apply_renamed_entity_sync(
+        root,
+        renamed.kind,
+        renamed.old_name,
+        renamed.new_name,
+    )
 
 
 def _markdown_validation_result(root: Path) -> tuple[ValidationResult, Roadmap]:
@@ -301,6 +347,97 @@ def promote(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     _apply_graph_sync(root)
+
+
+_RENAME_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+
+
+def _rename_positionals(args: list[str]) -> list[str]:
+    positionals: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--path":
+            index += 2
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        positionals.append(arg)
+        index += 1
+    return positionals
+
+
+class _RenameTyperGroup(TyperGroup):
+    """Route ``rename OLD NEW`` to the bare rename handler."""
+
+    def resolve_command(self, ctx, args):
+        positionals = _rename_positionals(args)
+        if len(positionals) == 2:
+            return super().resolve_command(ctx, ["_bare", *args])
+        return super().resolve_command(ctx, args)
+
+
+rename_app = typer.Typer(
+    help="Rename roadmap entities.",
+    cls=_RenameTyperGroup,
+    no_args_is_help=True,
+)
+app.add_typer(rename_app, name="rename")
+
+
+@rename_app.command("_bare", hidden=True)
+def rename_bare(
+    old_name: Annotated[str, typer.Argument(help="Current entity name (kebab-case)")],
+    new_name: Annotated[str, typer.Argument(help="New entity name (kebab-case)")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Rename by natural name when unambiguous."""
+    _run_rename(old_name, new_name, path=path)
+
+
+@rename_app.command("initiative")
+def rename_initiative(
+    old_name: Annotated[
+        str, typer.Argument(help="Current initiative name (kebab-case)")
+    ],
+    new_name: Annotated[str, typer.Argument(help="New initiative name (kebab-case)")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Rename an initiative."""
+    _run_rename(old_name, new_name, path=path, kind="initiative")
+
+
+@rename_app.command("project")
+def rename_project(
+    old_name: Annotated[str, typer.Argument(help="Current project name (kebab-case)")],
+    new_name: Annotated[str, typer.Argument(help="New project name (kebab-case)")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Rename a project."""
+    _run_rename(old_name, new_name, path=path, kind="project")
+
+
+@rename_app.command("milestone")
+def rename_milestone(
+    old_name: Annotated[
+        str, typer.Argument(help="Current milestone name (kebab-case)")
+    ],
+    new_name: Annotated[str, typer.Argument(help="New milestone name (kebab-case)")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Rename a milestone."""
+    _run_rename(old_name, new_name, path=path, kind="milestone")
+
+
+@rename_app.command("goal")
+def rename_goal(
+    old_name: Annotated[str, typer.Argument(help="Current goal name (kebab-case)")],
+    new_name: Annotated[str, typer.Argument(help="New goal name (kebab-case)")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Rename a goal."""
+    _run_rename(old_name, new_name, path=path, kind="goal")
 
 
 class _WbsTyperGroup(TyperGroup):

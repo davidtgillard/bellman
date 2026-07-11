@@ -77,6 +77,8 @@ bellman sync .
 bellman version
 bellman update --check
 bellman delete my-goal
+bellman rename old-name new-name
+bellman rename goal system-mci renamed-goal   # when names collide across types
 bellman plugin list
 bellman plugin my-plugin
 bellman report wbs tree --project billing-redesign   # PERT tree to stdout
@@ -84,7 +86,9 @@ bellman report wbs tree --project billing-redesign   # PERT tree to stdout
 
 `validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
 
-`create`, `delete`, and `promote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
+`create`, `delete`, `rename`, and `promote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
+
+`rename` moves the entity on disk (initiative, project, milestone, or goal), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Use a bare name when it is unambiguous, a layout path such as `goals/foo.md` to pick one of several entities with the same name, or a type subcommand when initiative and goal (for example) share a name: `bellman rename goal foo bar`.
 
 ## Plugins
 
