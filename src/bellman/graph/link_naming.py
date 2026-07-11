@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pyfits import TargetId
+from pyfits import InstanceName
 
 from bellman.model import Hardness, PrecedenceEdge, RelationType
 
@@ -17,13 +17,13 @@ def display_name(link_type: str, from_ref: str, to_ref: str) -> str:
     return f"{link_type}:{from_ref}->{to_ref}"
 
 
-def wire_target_id(link_type: str, from_ref: str, to_ref: str) -> TargetId:
-    """Single-segment opaque id for pyfits ``target_id`` on link create."""
+def wire_link_name(link_type: str, from_ref: str, to_ref: str) -> InstanceName:
+    """Deterministic human link name for pyfits ``name`` on link create."""
     raw = f"{link_type}--{from_ref}--{to_ref}".replace("/", "--")
-    return TargetId.parse(raw)
+    return InstanceName(raw)
 
 
-def precedes_target_id(edge: PrecedenceEdge) -> TargetId:
-    """Target id for a precedence edge."""
+def precedes_link_name(edge: PrecedenceEdge) -> InstanceName:
+    """Link name for a precedence edge."""
     lt = precedes_link_type(edge.relation, edge.hardness)
-    return wire_target_id(lt, edge.predecessor, edge.successor)
+    return wire_link_name(lt, edge.predecessor, edge.successor)

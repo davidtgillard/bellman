@@ -17,6 +17,7 @@ from bellman.graph.desired import (
     natural_name_from_node_id,
 )
 from bellman.graph.history import load_graph_history
+from bellman.graph.identity import InstanceIndex
 from bellman.graph.legacy import registry_needs_id_migration
 from bellman.graph.registry import bellman_link_types, bellman_node_types
 from bellman.graph.sync import libfits_available
@@ -77,7 +78,7 @@ def _actual_nodes(root: Path) -> Result[set[DesiredNode], RegistryDeltaError]:
     if isinstance(history_result, Err):
         return Err(RegistryDeltaError(history_result.err_value.format()))
     nodes = {
-        DesiredNode(inst.type_name, inst.instance_id)
+        DesiredNode(inst.type_name, inst.instance_name)
         for inst in history_result.ok_value.instances
         if inst.kind == "node" and inst.type_name in bellman_node_types()
     }
@@ -87,6 +88,11 @@ def _actual_nodes(root: Path) -> Result[set[DesiredNode], RegistryDeltaError]:
 def _actual_links(
     root: Path,
 ) -> Result[set[DesiredLink], RegistryDeltaError | FitsError]:
+    index_result = InstanceIndex.load(root)
+    if isinstance(index_result, Err):
+        return Err(RegistryDeltaError(index_result.err_value.format()))
+    index = index_result.ok_value
+
     open_result = Repo.open(root)
     if isinstance(open_result, Err):
         return open_result
@@ -97,11 +103,15 @@ def _actual_links(
             return graph_result
         graph = graph_result.ok_value
     managed = bellman_link_types()
-    links = {
-        DesiredLink(edge.link_type, edge.from_id.value, edge.to_id.value)
-        for edge in graph.edges
-        if edge.link_type in managed
-    }
+    links: set[DesiredLink] = set()
+    for edge in graph.edges:
+        if edge.link_type not in managed:
+            continue
+        from_name = index.name_for_guid(edge.from_id.value)
+        to_name = index.name_for_guid(edge.to_id.value)
+        if from_name is None or to_name is None:
+            continue
+        links.add(DesiredLink(edge.link_type, from_name, to_name))
     return Ok(links)
 
 

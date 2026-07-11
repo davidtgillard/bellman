@@ -11,24 +11,24 @@ _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _QUALIFIED_PREFIXES = ("initiative--", "project--", "goal--", "milestone--")
 
 
-def is_legacy_flat_node_id(type_name: str, instance_id: str) -> bool:
-    """Return True when ``instance_id`` uses the pre-migration bare kebab scheme.
+def is_legacy_flat_node_id(type_name: str, instance_name: str) -> bool:
+    """Return True when ``instance_name`` uses the pre-migration bare kebab scheme.
 
     Args:
         type_name: Bellman node type from the registry (e.g. ``goal``).
-        instance_id: Opaque instance id stored in ``registry.json``.
+        instance_name: Human instance name stored in ``registry.json``.
 
     Returns:
-        True for bare kebab ids on bellman node types; false for qualified ids
-        and work-package ids (``project--slug``).
+        True for bare kebab names on bellman node types; false for qualified names
+        and work-package names (``project--slug``).
     """
     if type_name not in bellman_node_types():
         return False
     if type_name == "work_package":
         return False
-    if instance_id.startswith(_QUALIFIED_PREFIXES):
+    if instance_name.startswith(_QUALIFIED_PREFIXES):
         return False
-    return _KEBAB_RE.match(instance_id) is not None
+    return _KEBAB_RE.match(instance_name) is not None
 
 
 def registry_needs_id_migration(

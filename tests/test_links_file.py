@@ -18,6 +18,10 @@ from bellman.graph.sync import (
     sync_roadmap,
 )
 
+_NODE_GUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+_MISSING_GUID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+_LINK_GUID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+
 
 def test_reconcile_drops_unregistered_links(tmp_path: Path) -> None:
     registry_path = tmp_path / ".fits"
@@ -29,10 +33,10 @@ def test_reconcile_drops_unregistered_links(tmp_path: Path) -> None:
             {
                 "instances": [
                     {
-                        "id": "goal--a",
+                        "name": "goal--a",
                         "kind": "node",
                         "type": "goal",
-                        "guid": "g1",
+                        "guid": _NODE_GUID,
                         "scope": "root",
                     }
                 ]
@@ -47,10 +51,10 @@ def test_reconcile_drops_unregistered_links(tmp_path: Path) -> None:
                 "version": 1,
                 "links": [
                     {
-                        "id": "orphan-link",
+                        "guid": _LINK_GUID,
                         "link_type": "parent_of",
-                        "in": "goal--a",
-                        "out": "goal--missing",
+                        "in": _NODE_GUID,
+                        "out": _MISSING_GUID,
                         "labels": None,
                     }
                 ],

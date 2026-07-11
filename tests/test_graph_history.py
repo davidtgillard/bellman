@@ -42,7 +42,7 @@ def test_load_graph_history_renames_and_tombstones(tmp_path: Path) -> None:
                     "next": 2,
                     "tombstones": [
                         {
-                            "id": "old-init",
+                            "name": "old-init",
                             "guid": "550e8400-e29b-41d4-a716-446655440000",
                             "git_commit": "a" * 40,
                         }
@@ -53,16 +53,17 @@ def test_load_graph_history_renames_and_tombstones(tmp_path: Path) -> None:
             "instance_renames": [
                 {
                     "guid": "660e8400-e29b-41d4-a716-446655440001",
-                    "old_id": "a",
-                    "new_id": "b",
+                    "old_name": "a",
+                    "new_name": "b",
                 }
             ],
             "instances": [
                 {
                     "guid": "770e8400-e29b-41d4-a716-446655440002",
-                    "id": "live",
+                    "name": "live",
                     "type": "initiative",
                     "kind": "node",
+                    "scope": "root",
                 }
             ],
         },
@@ -73,15 +74,15 @@ def test_load_graph_history_renames_and_tombstones(tmp_path: Path) -> None:
     assert len(history.renames) == 1
     assert history.renames[0] == InstanceRename(
         guid="660e8400-e29b-41d4-a716-446655440001",
-        old_id="a",
-        new_id="b",
+        old_name="a",
+        new_name="b",
         git_commit=None,
     )
     assert len(history.tombstones) == 1
-    assert history.tombstones[0].instance_id == "old-init"
+    assert history.tombstones[0].instance_name == "old-init"
     assert history.tombstones[0].git_commit == "a" * 40
     assert len(history.instances) == 1
-    assert history.instances[0].instance_id == "live"
+    assert history.instances[0].instance_name == "live"
 
 
 def test_bellman_context_history_lazy_no_repo(tmp_path: Path) -> None:

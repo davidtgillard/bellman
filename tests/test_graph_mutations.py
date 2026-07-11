@@ -17,18 +17,18 @@ from bellman.graph.sync import (
 )
 
 
-def _instance_type(root: Path, instance_id: str) -> str | None:
+def _instance_type(root: Path, instance_name: str) -> str | None:
     result = load_graph_history(root)
     if isinstance(result, Err):
         return None
     for inst in result.ok_value.instances:
-        if inst.instance_id == instance_id:
+        if inst.instance_name == instance_name:
             return inst.type_name
     return None
 
 
-def _has_live_instance(root: Path, instance_id: str) -> bool:
-    return _instance_type(root, instance_id) is not None
+def _has_live_instance(root: Path, instance_name: str) -> bool:
+    return _instance_type(root, instance_name) is not None
 
 
 def _bootstrap_pyfits(root: Path) -> None:
@@ -64,7 +64,7 @@ def test_delete_prunes_graph_node(tmp_path: Path) -> None:
     assert not _has_live_instance(tmp_path, "goal--my-goal")
     history = load_graph_history(tmp_path)
     assert isinstance(history, Ok)
-    assert all(i.instance_id != "goal--my-goal" for i in history.ok_value.instances)
+    assert all(i.instance_name != "goal--my-goal" for i in history.ok_value.instances)
 
 
 @pytest.mark.integration

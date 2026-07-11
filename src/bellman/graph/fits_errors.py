@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from pyfits import Id
+from pyfits import CreatedObject, Id
 from pyfits.errors import FitsError
 from pyfits.result import Err, Ok, Result
 
-# JSON ``error.code`` values for FITS_ERR_ALREADY_EXISTS (libfits 0.4+).
+# JSON ``error.code`` values for FITS_ERR_ALREADY_EXISTS (libfits 0.5+).
 _ALREADY_EXISTS_CODES = frozenset(
     {
         "DuplicateNodeType",
         "DuplicateLinkType",
-        "DuplicateInstanceId",
+        "DuplicateInstanceName",
     }
 )
 
@@ -36,24 +36,30 @@ def ignore_if_already_exists(
 
 
 def ignore_duplicate_instance(
-    result: Result[Id, FitsError],
+    result: Result[CreatedObject, FitsError],
     *,
-    node_id: Id,
-) -> Result[Id, FitsError]:
-    """Treat duplicate opaque node ids as success when ensuring graph nodes."""
+    logical_name: str,
+    guid: Id | None = None,
+) -> Result[CreatedObject, FitsError]:
+    """Treat duplicate instance names as success when ensuring graph nodes."""
     if isinstance(result, Err) and is_already_exists(result.err_value):
-        return Ok(node_id)
+        if guid is not None:
+            return Ok(CreatedObject(guid=guid, name=logical_name))
+        return Err(result.err_value)
     return result
 
 
 def ignore_duplicate_link(
-    result: Result[Id, FitsError],
+    result: Result[CreatedObject, FitsError],
     *,
-    link_id: Id,
-) -> Result[Id, FitsError]:
-    """Treat duplicate opaque link ids as success when ensuring graph links."""
+    link_name: str,
+    guid: Id | None = None,
+) -> Result[CreatedObject, FitsError]:
+    """Treat duplicate link names as success when ensuring graph links."""
     if isinstance(result, Err) and is_already_exists(result.err_value):
-        return Ok(link_id)
+        if guid is not None:
+            return Ok(CreatedObject(guid=guid, name=link_name))
+        return Err(result.err_value)
     return result
 
 

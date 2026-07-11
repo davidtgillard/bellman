@@ -10,6 +10,8 @@ from typing import Any
 from pyfits.errors import FitsError
 from pyfits.result import Err, Ok, Result
 
+from bellman.graph.identity import InstanceIndex
+
 _REGISTRY_PATH = Path(".fits") / "registry.json"
 _LINKS_PATH = Path("links") / "links.jsonc"
 _JSONC_COMMENT_RE = re.compile(r"//.*?$", re.MULTILINE)
@@ -25,28 +27,28 @@ def _load_jsonc(path: Path) -> dict[str, Any]:
     return data
 
 
-def _registered_ids(registry: dict[str, Any]) -> set[str]:
+def _registered_guids(registry: dict[str, Any]) -> set[str]:
     instances = registry.get("instances", [])
     if not isinstance(instances, list):
         return set()
     return {
-        inst["id"]
+        inst["guid"]
         for inst in instances
-        if isinstance(inst, dict) and isinstance(inst.get("id"), str)
+        if isinstance(inst, dict) and isinstance(inst.get("guid"), str)
     }
 
 
-def _registered_node_ids(registry: dict[str, Any]) -> set[str]:
+def _registered_node_guids(registry: dict[str, Any]) -> set[str]:
     instances = registry.get("instances", [])
     if not isinstance(instances, list):
         return set()
     return {
-        inst["id"]
+        inst["guid"]
         for inst in instances
         if (
             isinstance(inst, dict)
             and inst.get("kind") == "node"
-            and isinstance(inst.get("id"), str)
+            and isinstance(inst.get("guid"), str)
         )
     }
 
@@ -55,21 +57,21 @@ def _link_is_valid(
     link: dict[str, Any],
     *,
     registered: set[str],
-    node_ids: set[str],
-    drop_touching_nodes: set[str],
+    node_guids: set[str],
+    drop_touching_guids: set[str],
 ) -> bool:
-    link_id = link.get("id")
-    in_id = link.get("in")
-    out_id = link.get("out")
-    if not isinstance(link_id, str):
+    link_guid = link.get("guid")
+    in_guid = link.get("in")
+    out_guid = link.get("out")
+    if not isinstance(link_guid, str):
         return False
-    if not isinstance(in_id, str) or not isinstance(out_id, str):
+    if not isinstance(in_guid, str) or not isinstance(out_guid, str):
         return False
-    if link_id not in registered:
+    if link_guid not in registered:
         return False
-    if in_id not in node_ids or out_id not in node_ids:
+    if in_guid not in node_guids or out_guid not in node_guids:
         return False
-    if in_id in drop_touching_nodes or out_id in drop_touching_nodes:
+    if in_guid in drop_touching_guids or out_guid in drop_touching_guids:
         return False
     return True
 
@@ -82,13 +84,14 @@ def reconcile_link_artifacts(
     """Drop invalid ``links.jsonc`` rows and stale link registry instances.
 
     Removes links when:
-    - the link id is not registered in ``instances[]``
-    - either endpoint is not a registered node instance
-    - either endpoint is listed in ``drop_touching_nodes``
+    - the link guid is not registered in ``instances[]``
+    - either endpoint guid is not a registered node instance
+    - either endpoint guid matches a node listed in ``drop_touching_nodes``
 
     Args:
         root: Roadmap root directory.
-        drop_touching_nodes: Optional node ids whose incident links should be removed.
+        drop_touching_nodes: Optional logical node names whose incident links
+            should be removed.
 
     Returns:
         ``Ok(count)`` with the number of removed link rows (jsonc + registry).
@@ -111,9 +114,16 @@ def reconcile_link_artifacts(
             FitsError("links file missing links array", code="links_reconcile_failed")
         )
 
-    registered = _registered_ids(registry)
-    node_ids = _registered_node_ids(registry)
-    touching = drop_touching_nodes or set()
+    registered = _registered_guids(registry)
+    node_guids = _registered_node_guids(registry)
+    touching_logical = drop_touching_nodes or set()
+    drop_touching_guids: set[str] = set()
+    if touching_logical:
+        index_result = InstanceIndex.load(root)
+        if isinstance(index_result, Ok):
+            drop_touching_guids = index_result.ok_value.guids_for_names(
+                touching_logical
+            )
 
     kept_links: list[dict[str, Any]] = []
     for item in links:
@@ -122,13 +132,13 @@ def reconcile_link_artifacts(
         if _link_is_valid(
             item,
             registered=registered,
-            node_ids=node_ids,
-            drop_touching_nodes=touching,
+            node_guids=node_guids,
+            drop_touching_guids=drop_touching_guids,
         ):
             kept_links.append(item)
 
-    kept_link_ids = {
-        link["id"] for link in kept_links if isinstance(link.get("id"), str)
+    kept_link_guids = {
+        link["guid"] for link in kept_links if isinstance(link.get("guid"), str)
     }
     removed_links = len(links) - len(kept_links)
 
@@ -141,7 +151,7 @@ def reconcile_link_artifacts(
     for inst in instances:
         if not isinstance(inst, dict):
             continue
-        if inst.get("kind") == "link" and inst.get("id") not in kept_link_ids:
+        if inst.get("kind") == "link" and inst.get("guid") not in kept_link_guids:
             removed_registry += 1
             continue
         kept_instances.append(inst)

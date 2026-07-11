@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pyfits import Id
+from pyfits import CreatedObject, Id
 from pyfits.errors import FitsError, FitsStatus
 from pyfits.result import Err, Ok
 
@@ -20,6 +20,11 @@ def test_is_already_exists_by_code() -> None:
     assert is_already_exists(err)
 
 
+def test_is_already_exists_by_name_code() -> None:
+    err = FitsError("duplicate name", code="DuplicateInstanceName")
+    assert is_already_exists(err)
+
+
 def test_is_already_exists_by_status() -> None:
     err = FitsError("duplicate", status=FitsStatus.ERR_INTERNAL)
     assert not is_already_exists(err)
@@ -34,11 +39,13 @@ def test_ignore_if_already_exists() -> None:
 
 
 def test_ignore_duplicate_instance() -> None:
-    err = FitsError("instance id 'x' already registered", code="DuplicateInstanceId")
-    node_id = Id("x")
-    result = ignore_duplicate_instance(Err(err), node_id=node_id)
+    err = FitsError(
+        "instance name 'x' already registered", code="DuplicateInstanceName"
+    )
+    guid = Id("550e8400-e29b-41d4-a716-446655440000")
+    result = ignore_duplicate_instance(Err(err), logical_name="x", guid=guid)
     assert isinstance(result, Ok)
-    assert result.ok_value == node_id
+    assert result.ok_value == CreatedObject(guid=guid, name="x")
 
 
 def test_is_nothing_to_remove() -> None:

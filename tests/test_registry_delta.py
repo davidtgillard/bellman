@@ -12,6 +12,7 @@ from bellman import layout
 from bellman.graph.delta import compute_registry_delta
 from bellman.graph.desired import desired_links, desired_nodes
 from bellman.graph.history import GraphHistory, InstanceRecord
+from bellman.graph.identity import InstanceIndex
 from bellman.roadmap import load
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
@@ -48,6 +49,10 @@ def test_compute_registry_delta_reports_missing_goal(tmp_path: Path) -> None:
             return_value=Ok(GraphHistory()),
         ),
         patch(
+            "bellman.graph.delta.InstanceIndex.load",
+            return_value=Ok(InstanceIndex.from_history(GraphHistory())),
+        ),
+        patch(
             "bellman.graph.delta.Repo.open",
             return_value=Ok(_FakeRepo(graph=Graph(nodes=(), edges=()))),
         ),
@@ -69,7 +74,7 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
         instances=(
             InstanceRecord(
                 guid="00000000-0000-0000-0000-000000000001",
-                instance_id="orphan-goal",
+                instance_name="orphan-goal",
                 type_name="goal",
                 kind="node",
             ),
@@ -80,6 +85,10 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
         patch(
             "bellman.graph.delta.load_graph_history",
             return_value=Ok(history),
+        ),
+        patch(
+            "bellman.graph.delta.InstanceIndex.load",
+            return_value=Ok(InstanceIndex.from_history(history)),
         ),
         patch(
             "bellman.graph.delta.Repo.open",
@@ -106,7 +115,7 @@ def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> N
         instances=(
             InstanceRecord(
                 guid="00000000-0000-0000-0000-000000000001",
-                instance_id="manual-goal",
+                instance_name="manual-goal",
                 type_name="goal",
                 kind="node",
             ),
@@ -117,6 +126,10 @@ def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> N
         patch(
             "bellman.graph.delta.load_graph_history",
             return_value=Ok(history),
+        ),
+        patch(
+            "bellman.graph.delta.InstanceIndex.load",
+            return_value=Ok(InstanceIndex.from_history(history)),
         ),
         patch(
             "bellman.graph.delta.Repo.open",
@@ -140,6 +153,10 @@ def test_compute_registry_delta_no_differences_when_aligned(tmp_path: Path) -> N
         patch(
             "bellman.graph.delta.load_graph_history",
             return_value=Ok(GraphHistory()),
+        ),
+        patch(
+            "bellman.graph.delta.InstanceIndex.load",
+            return_value=Ok(InstanceIndex.from_history(GraphHistory())),
         ),
         patch(
             "bellman.graph.delta.Repo.open",

@@ -40,18 +40,18 @@ class InstanceRename:
     """Recorded rename of a graph instance (GUID stable)."""
 
     guid: str
-    old_id: str
-    new_id: str
+    old_name: str
+    new_name: str
     git_commit: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class TombstoneRecord:
-    """Removed or retired instance id for a registered type."""
+    """Removed or retired instance name for a registered type."""
 
     type_name: str
     kind: Literal["node", "link"]
-    instance_id: str | None = None
+    instance_name: str | None = None
     numeric_id: int | None = None
     guid: str | None = None
     git_commit: str | None = None
@@ -62,11 +62,11 @@ class InstanceRecord:
     """Live instance row from the registry index."""
 
     guid: str
-    instance_id: str
+    instance_name: str
     type_name: str
     kind: Literal["node", "link"]
     scope: str = "root"
-    parent_id: str | None = None
+    parent_guid: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,20 +157,20 @@ def _parse_renames(raw: Any) -> list[InstanceRename]:
         if not isinstance(item, dict):
             continue
         guid = item.get("guid")
-        old_id = item.get("old_id")
-        new_id = item.get("new_id")
+        old_name = item.get("old_name")
+        new_name = item.get("new_name")
         if not (
             isinstance(guid, str)
-            and isinstance(old_id, str)
-            and isinstance(new_id, str)
+            and isinstance(old_name, str)
+            and isinstance(new_name, str)
         ):
             continue
         git_commit = item.get("git_commit")
         out.append(
             InstanceRename(
                 guid=guid,
-                old_id=old_id,
-                new_id=new_id,
+                old_name=old_name,
+                new_name=new_name,
                 git_commit=git_commit if isinstance(git_commit, str) else None,
             )
         )
@@ -206,12 +206,12 @@ def _parse_tombstones(
                     git_commit=(git_commit if isinstance(git_commit, str) else None),
                 )
             )
-        elif "id" in ts and isinstance(ts["id"], str):
+        elif "name" in ts and isinstance(ts["name"], str):
             out.append(
                 TombstoneRecord(
                     type_name=type_name,
                     kind=kind,
-                    instance_id=ts["id"],
+                    instance_name=ts["name"],
                     guid=guid if isinstance(guid, str) else None,
                     git_commit=(git_commit if isinstance(git_commit, str) else None),
                 )
@@ -227,26 +227,26 @@ def _parse_instances(raw: Any) -> list[InstanceRecord]:
         if not isinstance(item, dict):
             continue
         guid = item.get("guid")
-        instance_id = item.get("id")
+        instance_name = item.get("name")
         type_name = item.get("type")
         item_kind = item.get("kind")
         if not (
             isinstance(guid, str)
-            and isinstance(instance_id, str)
+            and isinstance(instance_name, str)
             and isinstance(type_name, str)
             and item_kind in ("node", "link")
         ):
             continue
         scope = item.get("scope")
-        parent_id = item.get("parent_id")
+        parent_guid = item.get("parent_guid")
         out.append(
             InstanceRecord(
                 guid=guid,
-                instance_id=instance_id,
+                instance_name=instance_name,
                 type_name=type_name,
                 kind=item_kind,
                 scope=scope if isinstance(scope, str) else "root",
-                parent_id=parent_id if isinstance(parent_id, str) else None,
+                parent_guid=parent_guid if isinstance(parent_guid, str) else None,
             )
         )
     return out

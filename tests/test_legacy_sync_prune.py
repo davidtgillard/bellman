@@ -41,14 +41,14 @@ def test_sync_prune_tolerates_legacy_registry_ghosts(tmp_path: Path) -> None:
         [
             {
                 "guid": guid,
-                "id": "manual-goal",
+                "name": "manual-goal",
                 "type": "goal",
                 "kind": "node",
                 "scope": "root",
             },
             {
                 "guid": guid,
-                "id": qualified,
+                "name": qualified,
                 "type": "goal",
                 "kind": "node",
                 "scope": "root",
@@ -62,9 +62,13 @@ def test_sync_prune_tolerates_legacy_registry_ghosts(tmp_path: Path) -> None:
     open_result = Repo.open(tmp_path)
     assert isinstance(open_result, Ok)
     with open_result.ok_value as repo:
-        graph = repo.output_graph()
-        assert isinstance(graph, Ok)
-        node_ids = {node.id.value for node in graph.ok_value.nodes}
         validation = repo.validate()
-    assert qualified in node_ids
+    history_after = load_graph_history(tmp_path)
+    assert isinstance(history_after, Ok)
+    node_names = {
+        inst.instance_name
+        for inst in history_after.ok_value.instances
+        if inst.kind == "node"
+    }
+    assert qualified in node_names
     assert isinstance(validation, Ok)

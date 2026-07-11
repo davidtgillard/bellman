@@ -101,9 +101,7 @@ dependencies = [
     { name = "click" },
     { name = "mypy" },
     { name = "pip-audit" },
-    { name = "pyfits", version = "0.1.0.dev0", source = { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp312-cp312-manylinux_2_36_x86_64.whl" }, marker = "python_full_version < '3.13'" },
-    { name = "pyfits", version = "0.1.0.dev0", source = { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp313-cp313-manylinux_2_36_x86_64.whl" }, marker = "python_full_version == '3.13.*'" },
-    { name = "pyfits", version = "0.1.0.dev0", source = { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl" }, marker = "python_full_version >= '3.14'" },
+    { name = "pyfits" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pyyaml" },
@@ -129,10 +127,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pip-audit", specifier = ">=2.10.0" },
-    { name = "pyfits", marker = "python_full_version < '3.12' or python_full_version >= '3.15'" },
-    { name = "pyfits", marker = "python_full_version == '3.12.*'", url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp312-cp312-manylinux_2_36_x86_64.whl" },
-    { name = "pyfits", marker = "python_full_version == '3.13.*'", url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp313-cp313-manylinux_2_36_x86_64.whl" },
-    { name = "pyfits", marker = "python_full_version == '3.14.*'", url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl" },
+    { name = "pyfits", editable = "../pyfits.git" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
@@ -795,17 +790,11 @@ wheels = [
 [[package]]
 name = "pyfits"
 version = "0.1.0.dev0"
-source = { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp312-cp312-manylinux_2_36_x86_64.whl" }
-resolution-markers = [
-    "python_full_version < '3.13'",
-]
+source = { editable = "../pyfits.git" }
 dependencies = [
-    { name = "jsonschema", marker = "python_full_version < '3.13'" },
-    { name = "pyrsistent", marker = "python_full_version < '3.13'" },
-    { name = "result", marker = "python_full_version < '3.13'" },
-]
-wheels = [
-    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp312-cp312-manylinux_2_36_x86_64.whl", hash = "sha256:bcf5f17fdf536ecfa359b442364633471079d9e60617ac38191e6d3b72c77677" },
+    { name = "jsonschema" },
+    { name = "pyrsistent" },
+    { name = "result" },
 ]
 
 [package.metadata]
@@ -815,50 +804,22 @@ requires-dist = [
     { name = "result", specifier = ">=0.17.0" },
 ]
 
-[[package]]
-name = "pyfits"
-version = "0.1.0.dev0"
-source = { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp313-cp313-manylinux_2_36_x86_64.whl" }
-resolution-markers = [
-    "python_full_version == '3.13.*'",
+[package.metadata.requires-dev]
+dev = [
+    { name = "basedpyright", specifier = ">=1.29.0" },
+    { name = "mypy", specifier = ">=2.1.0" },
+    { name = "pip-audit", specifier = ">=2.10.0" },
+    { name = "pytest", specifier = ">=8.3.0" },
+    { name = "pytest-cov", specifier = ">=6.0.0" },
+    { name = "ruff", specifier = ">=0.15.13" },
+    { name = "types-jsonschema", specifier = ">=4.23.0" },
 ]
-dependencies = [
-    { name = "jsonschema", marker = "python_full_version == '3.13.*'" },
-    { name = "pyrsistent", marker = "python_full_version == '3.13.*'" },
-    { name = "result", marker = "python_full_version == '3.13.*'" },
-]
-wheels = [
-    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp313-cp313-manylinux_2_36_x86_64.whl", hash = "sha256:b424822a83990b583de3072540f89f63e32a4fb47b062eb297fec3db7e03576c" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jsonschema", specifier = ">=4.23.0" },
-    { name = "pyrsistent", specifier = ">=0.20.0" },
-    { name = "result", specifier = ">=0.17.0" },
-]
-
-[[package]]
-name = "pyfits"
-version = "0.1.0.dev0"
-source = { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl" }
-resolution-markers = [
-    "python_full_version >= '3.14'",
-]
-dependencies = [
-    { name = "jsonschema", marker = "python_full_version >= '3.14'" },
-    { name = "pyrsistent", marker = "python_full_version >= '3.14'" },
-    { name = "result", marker = "python_full_version >= '3.14'" },
-]
-wheels = [
-    { url = "https://github.com/davidtgillard/pyfits/releases/download/dev/pyfits-0.1.0.dev0-cp314-cp314-manylinux_2_36_x86_64.whl", hash = "sha256:c14f14e0b6b25b98a53658a50241c1adb7764815feee8d39af31b1d420fa8cf9" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jsonschema", specifier = ">=4.23.0" },
-    { name = "pyrsistent", specifier = ">=0.20.0" },
-    { name = "result", specifier = ">=0.17.0" },
+docs = [
+    { name = "furo", specifier = ">=2024.0" },
+    { name = "myst-parser", specifier = ">=4.0" },
+    { name = "sphinx", specifier = ">=8.0" },
+    { name = "sphinx-autobuild", specifier = ">=2024.0" },
+    { name = "sphinx-copybutton", specifier = ">=0.5" },
 ]
 
 [[package]]
