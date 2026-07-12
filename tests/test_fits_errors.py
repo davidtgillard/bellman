@@ -26,11 +26,17 @@ def test_is_already_exists_by_name_code() -> None:
     assert is_already_exists(err)
 
 
+def test_is_already_exists_by_guid_code() -> None:
+    err = FitsError("duplicate guid", code="DuplicateGuid")
+    assert is_already_exists(err)
+
+
 def test_is_already_exists_by_status() -> None:
     err = FitsError("duplicate", status=FitsStatus.ERR_INTERNAL)
     assert not is_already_exists(err)
-    legacy = FitsError("duplicate", status=-14)  # type: ignore[arg-type]
-    assert is_already_exists(legacy)
+    assert is_already_exists(
+        FitsError("duplicate", status=FitsStatus.ERR_ALREADY_EXISTS)
+    )
 
 
 def test_ignore_if_already_exists() -> None:
@@ -43,6 +49,14 @@ def test_ignore_duplicate_instance() -> None:
     err = FitsError(
         "instance name 'x' already registered", code="DuplicateInstanceName"
     )
+    guid = Id("550e8400-e29b-41d4-a716-446655440000")
+    result = ignore_duplicate_instance(Err(err), logical_name="x", guid=guid)
+    assert isinstance(result, Ok)
+    assert result.ok_value == CreatedObject(guid=guid, name="x")
+
+
+def test_ignore_duplicate_instance_by_guid() -> None:
+    err = FitsError("guid already registered", code="DuplicateGuid")
     guid = Id("550e8400-e29b-41d4-a716-446655440000")
     result = ignore_duplicate_instance(Err(err), logical_name="x", guid=guid)
     assert isinstance(result, Ok)
