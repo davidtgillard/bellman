@@ -632,6 +632,15 @@ def sync_created_entity(
     return Ok(None)
 
 
+def _with_ensure_context(error: FitsError, context: str) -> FitsError:
+    """Rewrite a FitsError message with operation context, preserving code/status."""
+    return FitsError(
+        f"{context}: {error}",
+        code=error.code,
+        status=error.status,
+    )
+
+
 def _ensure_node(
     repo: Repo,
     root: Path,
@@ -675,11 +684,19 @@ def _ensure_node(
     guid = None
     if isinstance(index_result, Ok):
         guid = index_result.ok_value.guid_for_name(logical_name)
-    return ignore_duplicate_instance(
+    ensured = ignore_duplicate_instance(
         result,
         logical_name=logical_name,
         guid=guid,
     )
+    if isinstance(ensured, Err):
+        return Err(
+            _with_ensure_context(
+                ensured.err_value,
+                f"failed to ensure node {logical_name} (type={type_name})",
+            )
+        )
+    return ensured
 
 
 def _guid_tail(value: str) -> str:
@@ -757,11 +774,22 @@ def _ensure_link(
             )
         )
     existing_guid = index.guid_for_name(link_name.value)
-    return ignore_duplicate_link(
+    ensured = ignore_duplicate_link(
         result,
         link_name=link_name.value,
         guid=existing_guid,
     )
+    if isinstance(ensured, Err):
+        return Err(
+            _with_ensure_context(
+                ensured.err_value,
+                (
+                    f"failed to ensure link {link_type} "
+                    f"{from_logical!r} -> {to_logical!r}"
+                ),
+            )
+        )
+    return ensured
 
 
 def _sync_project_wps(

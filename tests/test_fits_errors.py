@@ -7,6 +7,7 @@ from pyfits.errors import FitsError, FitsStatus
 from pyfits.result import Err, Ok
 
 from bellman.graph.fits_errors import (
+    format_fits_error,
     ignore_duplicate_instance,
     ignore_if_already_exists,
     ignore_nothing_to_remove,
@@ -58,3 +59,27 @@ def test_ignore_nothing_to_remove() -> None:
     err = FitsError("internal error", code="NothingToRemove")
     result = ignore_nothing_to_remove(Err(err))
     assert isinstance(result, Ok)
+
+
+def test_format_fits_error_message_only() -> None:
+    err = FitsError("boom")
+    assert format_fits_error(err) == "boom"
+
+
+def test_format_fits_error_with_code() -> None:
+    err = FitsError("internal error", code="DuplicateNestedNode")
+    assert format_fits_error(err) == "internal error (code=DuplicateNestedNode)"
+
+
+def test_format_fits_error_with_status_when_no_code() -> None:
+    err = FitsError("libfits call failed", status=FitsStatus.ERR_INTERNAL)
+    assert format_fits_error(err) == "libfits call failed (status=ERR_INTERNAL)"
+
+
+def test_format_fits_error_prefers_code_over_status() -> None:
+    err = FitsError(
+        "internal error",
+        code="DuplicateNestedNode",
+        status=FitsStatus.ERR_INTERNAL,
+    )
+    assert format_fits_error(err) == "internal error (code=DuplicateNestedNode)"

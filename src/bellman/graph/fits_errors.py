@@ -63,6 +63,25 @@ def ignore_duplicate_link(
     return result
 
 
+def format_fits_error(error: FitsError) -> str:
+    """Format a FitsError for CLI output, including code or status when present.
+
+    libfits often returns a generic message such as ``internal error`` while the
+    structured ``code`` (e.g. ``DuplicateNestedNode``) carries the actionable detail.
+    """
+    message = str(error)
+    if error.code is not None:
+        return f"{message} (code={error.code})"
+    if error.status is not None:
+        status_label = (
+            error.status.name
+            if hasattr(error.status, "name")
+            else str(int(error.status))
+        )
+        return f"{message} (status={status_label})"
+    return message
+
+
 def is_nothing_to_remove(error: FitsError) -> bool:
     """Return True when libfits has a registry entry but no on-disk object to remove."""
     return error.code == "NothingToRemove"

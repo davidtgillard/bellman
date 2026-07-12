@@ -1,0 +1,358 @@
+{
+  "description": "Tracks registered node types (abstract and concrete), link types, numeric id counters, and tombstones. Do not edit by hand; use the fits CLI.",
+  "version": 1,
+  "kind": "fits-registry",
+  "node_types": [
+    {
+      "type": "goal",
+      "container_node": "kind",
+      "next": 1,
+      "autonumber": true,
+      "tombstones": []
+    },
+    {
+      "type": "initiative",
+      "extends": "work_scope",
+      "container_node": "kind",
+      "next": 1,
+      "autonumber": true,
+      "tombstones": []
+    },
+    {
+      "type": "kind",
+      "next": 1,
+      "autonumber": true,
+      "tombstones": []
+    },
+    {
+      "type": "milestone",
+      "container_node": "kind",
+      "next": 1,
+      "autonumber": true,
+      "tombstones": []
+    },
+    {
+      "type": "project",
+      "extends": "work_scope",
+      "container_node": "kind",
+      "next": 1,
+      "autonumber": true,
+      "tombstones": []
+    },
+    {
+      "type": "work_package",
+      "container_node": "project",
+      "next": 1,
+      "autonumber": true,
+      "tombstones": []
+    },
+    {
+      "type": "work_scope",
+      "abstract": true
+    }
+  ],
+  "link_types": [],
+  "nested_link_types": [
+    {
+      "link_type": "parent_of",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FF_Discretionary",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FF_Discretionary_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FF_Mandatory",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FF_Mandatory_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FF_Optional",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FF_Optional_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FS_Discretionary",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FS_Discretionary_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FS_Mandatory",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FS_Mandatory_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FS_Optional",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_FS_Optional_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SF_Discretionary",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SF_Discretionary_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SF_Mandatory",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SF_Mandatory_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SF_Optional",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SF_Optional_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SS_Discretionary",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SS_Discretionary_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SS_Mandatory",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SS_Mandatory_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SS_Optional",
+      "in_type": "work_package",
+      "out_type": "work_package",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "precedes_SS_Optional_scope",
+      "in_type": "project",
+      "out_type": "project",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "promoted_from",
+      "in_type": "project",
+      "out_type": "initiative",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "supports",
+      "in_type": "project",
+      "out_type": "goal",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "supports_wp",
+      "in_type": "work_package",
+      "out_type": "goal",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "targets",
+      "in_type": "project",
+      "out_type": "milestone",
+      "next": 1,
+      "tombstones": []
+    },
+    {
+      "link_type": "targets_wp",
+      "in_type": "work_package",
+      "out_type": "milestone",
+      "next": 1,
+      "tombstones": []
+    }
+  ],
+  "nested_scopes": {
+    "fe60011f-b4a7-4bb9-9c62-4e079754a0ae": {
+      "parent_of": {
+        "next": 2,
+        "tombstones": []
+      },
+      "precedes_FS_Mandatory": {
+        "next": 2,
+        "tombstones": []
+      }
+    }
+  },
+  "instances": [
+    {
+      "guid": "2302b392-a541-4a50-99f8-18373d4be58c",
+      "name": "goal",
+      "type": "kind",
+      "kind": "node",
+      "scope": "root"
+    },
+    {
+      "guid": "36a41e69-0a45-4db7-8741-c6bb0d76b4a3",
+      "name": "initiative",
+      "type": "kind",
+      "kind": "node",
+      "scope": "root"
+    },
+    {
+      "guid": "39785cef-647a-4905-bf17-8d9e9a8e1fd5",
+      "name": "project",
+      "type": "kind",
+      "kind": "node",
+      "scope": "root"
+    },
+    {
+      "guid": "4e512abb-8009-4492-85f8-badd5a29144a",
+      "name": "milestone",
+      "type": "kind",
+      "kind": "node",
+      "scope": "root"
+    },
+    {
+      "guid": "57642866-56cd-4d04-826b-ce257054f4f6",
+      "name": "explore-ml-ranking",
+      "type": "initiative",
+      "kind": "node",
+      "scope": "nested",
+      "parent_guid": "36a41e69-0a45-4db7-8741-c6bb0d76b4a3"
+    },
+    {
+      "guid": "fe60011f-b4a7-4bb9-9c62-4e079754a0ae",
+      "name": "billing-redesign",
+      "type": "project",
+      "kind": "node",
+      "scope": "nested",
+      "parent_guid": "39785cef-647a-4905-bf17-8d9e9a8e1fd5"
+    },
+    {
+      "guid": "198d55c4-1a8c-4b57-aabf-55ee7d49c360",
+      "name": "wp-invoicing",
+      "type": "work_package",
+      "kind": "node",
+      "scope": "nested",
+      "parent_guid": "fe60011f-b4a7-4bb9-9c62-4e079754a0ae"
+    },
+    {
+      "guid": "060a51c5-a2cc-45f5-9cb5-9cde98bc8248",
+      "name": "wp-pdf-export",
+      "type": "work_package",
+      "kind": "node",
+      "scope": "nested",
+      "parent_guid": "fe60011f-b4a7-4bb9-9c62-4e079754a0ae"
+    },
+    {
+      "guid": "f06b4f6b-b15f-499f-8368-bad4a78dccb0",
+      "name": "ga-release",
+      "type": "milestone",
+      "kind": "node",
+      "scope": "nested",
+      "parent_guid": "4e512abb-8009-4492-85f8-badd5a29144a"
+    },
+    {
+      "guid": "e19c7fb6-3156-49b2-a2d7-77f3bb5e54e9",
+      "name": "reduce-churn",
+      "type": "goal",
+      "kind": "node",
+      "scope": "nested",
+      "parent_guid": "2302b392-a541-4a50-99f8-18373d4be58c"
+    }
+  ],
+  "instance_renames": []
+}

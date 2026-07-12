@@ -1,0 +1,12 @@
+# fits CLI settings (user-editable)
+update_check_time_period = 86400
+
+[nested]
+enforceContextFreeUniqueIDs = false
+
+[obj_types.kind]
+create_folder = true
+
+[obj_types.project]
+create_folder = true
+

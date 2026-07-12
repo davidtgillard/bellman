@@ -132,3 +132,4 @@ def test_sync_reports_sync_failure(tmp_path: Path) -> None:
         result = runner.invoke(app, ["sync", str(tmp_path)])
     assert result.exit_code == 1
     assert "Graph sync failed" in result.output
+    assert "code=test" in result.output

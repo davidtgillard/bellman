@@ -56,6 +56,7 @@ def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert (tmp_path / "initiatives" / "my-init.md").is_file()
     assert "Graph sync failed" in result.output
+    assert "code=test" in result.output
 
 
 def test_delete_calls_prune_deleted_entity(tmp_path: Path) -> None:

@@ -18,6 +18,7 @@ from bellman.graph.delta import (
     RegistryDeltaError,
     compute_registry_delta,
 )
+from bellman.graph.fits_errors import format_fits_error
 from bellman.graph.sync import (
     init_pyfits_repo,
     libfits_available,
@@ -62,7 +63,10 @@ def _apply_graph_sync(root: Path, *, prune: bool = False) -> None:
         return
     result = sync_roadmap(root, prune=prune)
     if isinstance(result, Err):
-        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        typer.echo(
+            f"Graph sync failed: {format_fits_error(result.err_value)}",
+            err=True,
+        )
         raise typer.Exit(code=1)
     typer.echo("Graph sync passed.")
 
@@ -74,7 +78,10 @@ def _apply_created_entity_sync(root: Path, kind: str, name: str) -> None:
         return
     result = sync_created_entity(root, kind, name)
     if isinstance(result, Err):
-        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        typer.echo(
+            f"Graph sync failed: {format_fits_error(result.err_value)}",
+            err=True,
+        )
         raise typer.Exit(code=1)
     typer.echo("Graph sync passed.")
 
@@ -86,7 +93,10 @@ def _apply_deleted_entity_prune(root: Path, kind: str, name: str) -> None:
         return
     result = prune_deleted_entity(root, kind, name)
     if isinstance(result, Err):
-        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        typer.echo(
+            f"Graph sync failed: {format_fits_error(result.err_value)}",
+            err=True,
+        )
         raise typer.Exit(code=1)
     typer.echo("Graph sync passed.")
 
@@ -103,7 +113,10 @@ def _apply_renamed_entity_sync(
         return
     result = sync_renamed_entity(root, kind, old_name, new_name)
     if isinstance(result, Err):
-        typer.echo(f"Graph sync failed: {result.err_value}", err=True)
+        typer.echo(
+            f"Graph sync failed: {format_fits_error(result.err_value)}",
+            err=True,
+        )
         raise typer.Exit(code=1)
     typer.echo("Graph sync passed.")
 
@@ -681,7 +694,10 @@ def sync(
 
     sync_result = sync_roadmap(root, prune=True)
     if isinstance(sync_result, Err):
-        typer.echo(f"Graph sync failed: {sync_result.err_value}", err=True)
+        typer.echo(
+            f"Graph sync failed: {format_fits_error(sync_result.err_value)}",
+            err=True,
+        )
         raise typer.Exit(code=1)
     typer.echo("Graph sync and libfits validation passed.")
 

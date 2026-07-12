@@ -1,0 +1,6 @@
+{
+  "description": "Directed links between issued object ids. Edit by hand or via fits CLI; validate with fits validate.",
+  "version": 1,
+  "kind": "fits-links-v1",
+  "links": []
+}
