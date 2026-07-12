@@ -33,7 +33,7 @@ def test_reconcile_drops_unregistered_links(tmp_path: Path) -> None:
             {
                 "instances": [
                     {
-                        "name": "goal--a",
+                        "name": "a",
                         "kind": "node",
                         "type": "goal",
                         "guid": _NODE_GUID,

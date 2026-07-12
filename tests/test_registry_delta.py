@@ -22,7 +22,7 @@ def test_desired_nodes_include_goals() -> None:
     roadmap = load(EXAMPLES)
     nodes = desired_nodes(roadmap)
     assert any(
-        node.type_name == "goal" and node.node_id == "goal--reduce-churn"
+        node.type_name == "goal" and node.node_id == "goal/reduce-churn"
         for node in nodes
     )
 
@@ -44,10 +44,6 @@ def test_compute_registry_delta_reports_missing_goal(tmp_path: Path) -> None:
 
     with (
         patch("bellman.graph.delta.libfits_available", return_value=True),
-        patch(
-            "bellman.graph.delta.load_graph_history",
-            return_value=Ok(GraphHistory()),
-        ),
         patch(
             "bellman.graph.delta.InstanceIndex.load",
             return_value=Ok(InstanceIndex.from_history(GraphHistory())),
@@ -82,10 +78,6 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
     )
     with (
         patch("bellman.graph.delta.libfits_available", return_value=True),
-        patch(
-            "bellman.graph.delta.load_graph_history",
-            return_value=Ok(history),
-        ),
         patch(
             "bellman.graph.delta.InstanceIndex.load",
             return_value=Ok(InstanceIndex.from_history(history)),
@@ -124,10 +116,6 @@ def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> N
     with (
         patch("bellman.graph.delta.libfits_available", return_value=True),
         patch(
-            "bellman.graph.delta.load_graph_history",
-            return_value=Ok(history),
-        ),
-        patch(
             "bellman.graph.delta.InstanceIndex.load",
             return_value=Ok(InstanceIndex.from_history(history)),
         ),
@@ -150,10 +138,6 @@ def test_compute_registry_delta_no_differences_when_aligned(tmp_path: Path) -> N
 
     with (
         patch("bellman.graph.delta.libfits_available", return_value=True),
-        patch(
-            "bellman.graph.delta.load_graph_history",
-            return_value=Ok(GraphHistory()),
-        ),
         patch(
             "bellman.graph.delta.InstanceIndex.load",
             return_value=Ok(InstanceIndex.from_history(GraphHistory())),
@@ -179,5 +163,5 @@ class _FakeRepo:
     def __exit__(self, *args: object) -> None:
         return None
 
-    def output_graph(self) -> Ok[Graph]:
+    def output_graph(self, *, include_nested: bool = False) -> Ok[Graph]:
         return Ok(self._graph)

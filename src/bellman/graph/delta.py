@@ -16,7 +16,6 @@ from bellman.graph.desired import (
     desired_nodes,
     natural_name_from_node_id,
 )
-from bellman.graph.history import load_graph_history
 from bellman.graph.identity import InstanceIndex
 from bellman.graph.legacy import registry_needs_id_migration
 from bellman.graph.registry import bellman_link_types, bellman_node_types
@@ -74,12 +73,12 @@ def _format_link(link: DesiredLink) -> str:
 
 
 def _actual_nodes(root: Path) -> Result[set[DesiredNode], RegistryDeltaError]:
-    history_result = load_graph_history(root)
-    if isinstance(history_result, Err):
-        return Err(RegistryDeltaError(history_result.err_value.format()))
+    index_result = InstanceIndex.load(root)
+    if isinstance(index_result, Err):
+        return Err(RegistryDeltaError(index_result.err_value.format()))
     nodes = {
-        DesiredNode(inst.type_name, inst.instance_name)
-        for inst in history_result.ok_value.instances
+        DesiredNode(inst.type_name, logical_name)
+        for logical_name, inst in index_result.ok_value.by_name.items()
         if inst.kind == "node" and inst.type_name in bellman_node_types()
     }
     return Ok(nodes)
@@ -98,7 +97,7 @@ def _actual_links(
         return open_result
     repo = open_result.ok_value
     with repo:
-        graph_result = repo.output_graph()
+        graph_result = repo.output_graph(include_nested=True)
         if isinstance(graph_result, Err):
             return graph_result
         graph = graph_result.ok_value

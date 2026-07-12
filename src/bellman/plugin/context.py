@@ -80,7 +80,7 @@ class BellmanContext:
         """
         if self._graph is None:
             repo = self.repo()
-            graph_result = repo.output_graph()
+            graph_result = repo.output_graph(include_nested=True)
             if isinstance(graph_result, Err):
                 msg = str(graph_result.err_value)
                 raise RuntimeError(msg) from None

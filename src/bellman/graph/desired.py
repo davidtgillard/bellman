@@ -9,6 +9,8 @@ from bellman import layout
 from bellman.graph import link_naming
 from bellman.model import Initiative, PrecedenceEdge, Project, Roadmap, WorkPackage
 
+_ENTITY_KINDS = ("initiative", "project", "goal", "milestone")
+
 
 @dataclass(frozen=True, slots=True)
 class DesiredNode:
@@ -28,18 +30,30 @@ class DesiredLink:
 
 
 def entity_node_id(type_name: str, name: str) -> str:
-    """Build a type-qualified opaque node id for pyfits."""
-    return f"{type_name}--{name}"
+    """Build a type-qualified opaque node id for pyfits.
 
-
-_QUALIFIED_PREFIXES = ("initiative--", "project--", "goal--", "milestone--")
+    Format: ``{type_name}/{name}`` (kind-root path).
+    """
+    return f"{type_name}/{name}"
 
 
 def natural_name_from_node_id(node_id: str) -> str:
     """Extract the natural entity name from an opaque node id for display."""
-    for prefix in _QUALIFIED_PREFIXES:
+    if "/" in node_id:
+        return node_id.rsplit("/", 1)[-1]
+    for type_name in _ENTITY_KINDS:
+        prefix = f"{type_name}--"
         if node_id.startswith(prefix):
             return node_id[len(prefix) :]
+    return node_id
+
+
+def local_name_from_node_id(node_id: str) -> str:
+    """Return the single-segment instance name for create/rename."""
+    if "/" in node_id:
+        return node_id.rsplit("/", 1)[-1]
+    if "--" in node_id:
+        return node_id.split("--", 1)[-1]
     return node_id
 
 
@@ -51,8 +65,8 @@ def scope_node_id(scope: Initiative | Project) -> str:
 
 
 def wp_node_id(project_name: str, slug: str) -> str:
-    """Opaque node id for a work package."""
-    return f"{project_name}--{slug}"
+    """Opaque node id for a work package nested under its project."""
+    return f"project/{project_name}/{slug}"
 
 
 def milestone_node_id(name: str) -> str:

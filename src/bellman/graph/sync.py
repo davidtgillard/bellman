@@ -17,6 +17,7 @@ from bellman.graph.desired import (
     entity_node_id,
     flatten_wps,
     goal_node_id,
+    local_name_from_node_id,
     milestone_node_id,
     resolve_entity_ref_from_layout,
     resolve_scope_ref,
@@ -28,13 +29,17 @@ from bellman.graph.fits_errors import (
     ignore_duplicate_instance,
     ignore_duplicate_link,
     ignore_nothing_to_remove,
-    is_already_exists,
 )
 from bellman.graph.history import BellmanHistoryError
 from bellman.graph.identity import InstanceIndex
-from bellman.graph.legacy import is_legacy_flat_node_id
+from bellman.graph.legacy import is_legacy_dash_qualified_id, is_legacy_flat_node_id
 from bellman.graph.links_file import reconcile_link_artifacts
-from bellman.graph.registry import bootstrap_registry
+from bellman.graph.registry import (
+    KIND_TYPE,
+    bootstrap_registry,
+    ensure_kind_roots,
+)
+from bellman.graph.schema_migrate import migrate_registry_schema
 from bellman.model import Goal, Initiative, Milestone, Project, Roadmap
 from bellman.parse.goal import parse_goal
 from bellman.parse.milestone import parse_milestone
@@ -47,15 +52,20 @@ def libfits_available() -> bool:
     return isinstance(load_library(), Ok)
 
 
-def _legacy_name_for_qualified(type_name: str, qualified_name: str) -> str | None:
-    """Return the pre-migration flat name for a type-qualified node name."""
-    prefix = f"{type_name}--"
-    if not qualified_name.startswith(prefix):
+def _parent_logical_path(logical_name: str) -> str | None:
+    if "/" not in logical_name:
         return None
-    legacy_name = qualified_name[len(prefix) :]
-    if is_legacy_flat_node_id(type_name, legacy_name):
-        return legacy_name
-    return None
+    return logical_name.rsplit("/", 1)[0]
+
+
+def _bootstrap_session(repo: Repo, root: Path) -> Result[None, FitsError]:
+    migrated = migrate_registry_schema(root)
+    if isinstance(migrated, Err):
+        return migrated
+    boot = bootstrap_registry(repo)
+    if isinstance(boot, Err):
+        return boot
+    return ensure_kind_roots(repo)
 
 
 def _migrate_legacy_node_ids(
@@ -63,39 +73,45 @@ def _migrate_legacy_node_ids(
     root: Path,
     desired: set[str],
 ) -> Result[None, FitsError]:
-    """Rename legacy flat node names to type-qualified names before ensure/prune."""
+    """Remove legacy flat/``--`` root nodes that map into desired slash paths.
+
+    Nested creates cannot rename across scope; markdown sync recreates nodes.
+    """
     index_result = InstanceIndex.load(root)
     if isinstance(index_result, Err):
         return Ok(None)
     index = index_result.ok_value
-    live_node_names = index.live_node_names()
 
-    for inst in index.by_name.values():
-        if inst.kind != "node":
+    for logical_name, inst in list(index.by_name.items()):
+        if inst.kind != "node" or inst.type_name == KIND_TYPE:
             continue
-        if not is_legacy_flat_node_id(inst.type_name, inst.instance_name):
+        if logical_name in desired:
             continue
-        legacy_name = inst.instance_name
-        qualified_name = entity_node_id(inst.type_name, legacy_name)
-        if qualified_name not in desired:
+        legacy = (
+            is_legacy_flat_node_id(inst.type_name, inst.instance_name)
+            or is_legacy_dash_qualified_id(logical_name)
+            or is_legacy_dash_qualified_id(inst.instance_name)
+        )
+        if not legacy:
             continue
-
-        if qualified_name in live_node_names:
+        # Drop when a slash-qualified desired id covers this entity.
+        if inst.type_name == "work_package":
+            # project--slug → project/project/slug
+            if "--" in inst.instance_name:
+                project_name, slug = inst.instance_name.split("--", 1)
+                if wp_node_id(project_name, slug) in desired:
+                    removed = ignore_nothing_to_remove(repo.remove(Id(inst.guid)))
+                    if isinstance(removed, Err):
+                        return removed
+            continue
+        natural = inst.instance_name
+        if "--" in natural:
+            _prefix, natural = natural.split("--", 1)
+        qualified = entity_node_id(inst.type_name, natural)
+        if qualified in desired:
             removed = ignore_nothing_to_remove(repo.remove(Id(inst.guid)))
             if isinstance(removed, Err):
                 return removed
-            live_node_names.discard(legacy_name)
-            continue
-
-        renamed = repo.rename_instance(
-            guid=Id(inst.guid),
-            new_name=InstanceName(qualified_name),
-        )
-        if isinstance(renamed, Err):
-            return renamed
-        live_node_names.discard(legacy_name)
-        live_node_names.add(qualified_name)
-
     return Ok(None)
 
 
@@ -117,7 +133,7 @@ def _logical_goal_name(name: str) -> str:
 
 def _reload_graph(repo: Repo) -> Result[Graph, FitsError]:
     """Refresh the in-memory graph snapshot from the repository."""
-    return repo.output_graph()
+    return repo.output_graph(include_nested=True)
 
 
 def _desired_graph_node_names(roadmap: Roadmap) -> set[str]:
@@ -138,8 +154,12 @@ def _prune_stale_registry(
     index_result = InstanceIndex.load(root)
     if isinstance(index_result, Err):
         return Ok(None)
-    for inst in index_result.ok_value.by_name.values():
-        if inst.kind != "node" or inst.instance_name in desired:
+    for logical_name, inst in index_result.ok_value.by_name.items():
+        if inst.kind != "node":
+            continue
+        if inst.type_name == KIND_TYPE:
+            continue
+        if logical_name in desired:
             continue
         removed = ignore_nothing_to_remove(repo.remove(Id(inst.guid)))
         if isinstance(removed, Err):
@@ -181,7 +201,9 @@ def _prune_stale_graph(
     stale_nodes = [
         node
         for node in graph.nodes
-        if (index.name_for_guid(node.id.value) or "") not in desired
+        if (name := index.name_for_guid(node.id.value)) is not None
+        and name not in desired
+        and name not in index.live_kind_names()
     ]
     stale_logical_names = {
         name
@@ -236,10 +258,19 @@ def _deleted_node_names(kind: str, name: str, root: Path) -> set[str]:
     names: set[str] = {entity_node_id(type_name, name), name}
     index_result = InstanceIndex.load(root)
     if isinstance(index_result, Ok) and kind == "project":
-        prefix = f"{name}--"
-        for inst in index_result.ok_value.by_name.values():
-            if inst.kind == "node" and inst.instance_name.startswith(prefix):
-                names.add(inst.instance_name)
+        project_logical = entity_node_id("project", name)
+        prefix = f"{project_logical}/"
+        for logical_name, inst in index_result.ok_value.by_name.items():
+            if inst.kind == "node" and logical_name.startswith(prefix):
+                names.add(logical_name)
+        # Legacy -- scheme
+        legacy_prefix = f"{name}--"
+        for logical_name, inst in index_result.ok_value.by_name.items():
+            if inst.kind == "node" and (
+                logical_name.startswith(legacy_prefix)
+                or inst.instance_name.startswith(legacy_prefix)
+            ):
+                names.add(logical_name)
     return names
 
 
@@ -254,7 +285,7 @@ def _validate_graph(repo: Repo, root: Path) -> Result[ValidateResult, FitsError]
     repaired = reconcile_link_artifacts(root)
     if isinstance(repaired, Err):
         return repaired
-    return repo.validate()
+    return repo.validate(include_nested_subgraphs=True)
 
 
 def prune_deleted_entity(
@@ -309,7 +340,7 @@ def prune_deleted_entity(
         return open_result
     repo = open_result.ok_value
     with repo:
-        boot = bootstrap_registry(repo)
+        boot = _bootstrap_session(repo, root)
         if isinstance(boot, Err):
             return boot
 
@@ -428,19 +459,15 @@ def sync_renamed_entity(
             )
         )
 
-    renames: list[tuple[str, str]] = [
-        (entity_node_id(type_name, old_name), entity_node_id(type_name, new_name)),
-        (old_name, entity_node_id(type_name, new_name)),
-    ]
-    if kind == "project":
-        renames.extend(_project_wp_node_renames(root, old_name, new_name))
+    old_logical = entity_node_id(type_name, old_name)
+    new_logical = entity_node_id(type_name, new_name)
 
     open_result = Repo.open(root)
     if isinstance(open_result, Err):
         return open_result
     repo = open_result.ok_value
     with repo:
-        boot = bootstrap_registry(repo)
+        boot = _bootstrap_session(repo, root)
         if isinstance(boot, Err):
             return boot
 
@@ -448,26 +475,30 @@ def sync_renamed_entity(
         if isinstance(index_result, Err):
             return Err(_history_to_fits_error(index_result.err_value))
         index = index_result.ok_value
-        live_node_names = index.live_node_names()
 
-        seen_old: set[str] = set()
-        for old_logical, new_logical in renames:
-            if old_logical in seen_old or old_logical == new_logical:
-                continue
-            seen_old.add(old_logical)
-            if old_logical not in live_node_names:
-                continue
+        if old_logical in index.live_node_names() and old_logical != new_logical:
             guid = index.guid_for_name(old_logical)
+            if guid is not None:
+                renamed = repo.rename_instance(
+                    guid=guid,
+                    new_name=InstanceName(new_name),
+                )
+                if isinstance(renamed, Err):
+                    return renamed
+
+        # Legacy flat / dash-qualified names
+        for candidate in (old_name, f"{type_name}--{old_name}"):
+            if candidate == old_logical:
+                continue
+            if candidate not in index.by_name:
+                continue
+            guid = index.guid_for_name(candidate)
             if guid is None:
                 continue
-            renamed = repo.rename_instance(
-                guid=guid,
-                new_name=InstanceName(new_logical),
-            )
-            if isinstance(renamed, Err):
-                return renamed
-            live_node_names.discard(old_logical)
-            live_node_names.add(new_logical)
+            # Cannot rename into nested scope; remove and let resync recreate.
+            removed = ignore_nothing_to_remove(repo.remove(guid))
+            if isinstance(removed, Err):
+                return removed
 
         sync_kind = _rename_graph_kind(kind)
         if kind in _CREATE_ENTITY_KINDS:
@@ -479,46 +510,6 @@ def sync_renamed_entity(
         if isinstance(val, Err):
             return val
     return Ok(None)
-
-
-def _project_wp_node_renames(
-    root: Path,
-    old_name: str,
-    new_name: str,
-) -> list[tuple[str, str]]:
-    """Return work-package logical name renames after a project rename."""
-    renames: list[tuple[str, str]] = []
-    wp_path = layout.work_packages_path(root, new_name)
-    if wp_path.is_file():
-        try:
-            project = parse_work_scope(
-                layout.project_md_path(root, new_name),
-                is_project=True,
-                work_packages_path=wp_path,
-            )
-            assert isinstance(project, Project)
-            for wp, _parent in flatten_wps(project.work_packages, None, project.name):
-                renames.append(
-                    (
-                        wp_node_id(old_name, wp.slug),
-                        wp_node_id(new_name, wp.slug),
-                    )
-                )
-        except (ValueError, OSError):
-            pass
-
-    index_result = InstanceIndex.load(root)
-    if isinstance(index_result, Ok):
-        prefix = f"{old_name}--"
-        known_old = {old for old, _new in renames}
-        for inst in index_result.ok_value.by_name.values():
-            if inst.kind != "node" or not inst.instance_name.startswith(prefix):
-                continue
-            if inst.instance_name in known_old:
-                continue
-            slug = inst.instance_name[len(prefix) :]
-            renames.append((inst.instance_name, wp_node_id(new_name, slug)))
-    return renames
 
 
 def sync_created_entity(
@@ -565,10 +556,10 @@ def sync_created_entity(
         return open_result
     repo = open_result.ok_value
     with repo:
-        boot = bootstrap_registry(repo)
+        boot = _bootstrap_session(repo, root)
         if isinstance(boot, Err):
             return boot
-        graph_result = repo.output_graph()
+        graph_result = _reload_graph(repo)
         if isinstance(graph_result, Err):
             return graph_result
         graph = graph_result.ok_value
@@ -656,31 +647,49 @@ def _ensure_node(
     index = index_result.ok_value
 
     if logical_name in index.live_node_names():
-        existing = index.by_name[logical_name]
-        return Ok(CreatedObject(guid=Id(existing.guid), name=logical_name))
+        guid = index.guid_for_name(logical_name)
+        assert guid is not None
+        return Ok(CreatedObject(guid=guid, name=logical_name))
 
-    legacy_name = _legacy_name_for_qualified(type_name, logical_name)
-    if legacy_name is not None and legacy_name in index.live_node_names():
-        legacy = index.by_name[legacy_name]
-        renamed = repo.rename_instance(
-            guid=Id(legacy.guid),
-            new_name=InstanceName(logical_name),
-        )
-        if isinstance(renamed, Ok):
-            return renamed
-        if isinstance(renamed, Err) and not is_already_exists(renamed.err_value):
-            return renamed
+    parent_path = _parent_logical_path(logical_name)
+    local_name = local_name_from_node_id(logical_name)
+    container_guid: Id | None = None
+    if parent_path is not None:
+        container_guid = index.guid_for_name(parent_path)
+        if container_guid is None:
+            return Err(
+                FitsError(
+                    f"container not registered for {logical_name!r}: {parent_path!r}",
+                    code="container_not_found",
+                )
+            )
 
     result = repo.new_node(
         ObjectTypeName(type_name),
-        name=InstanceName(logical_name),
+        container_guid=container_guid,
+        name=InstanceName(local_name),
         title=title,
     )
+    # Reload index for duplicate recovery after create race
+    index_result = InstanceIndex.load(root)
+    guid = None
+    if isinstance(index_result, Ok):
+        guid = index_result.ok_value.guid_for_name(logical_name)
     return ignore_duplicate_instance(
         result,
         logical_name=logical_name,
-        guid=index.guid_for_name(logical_name),
+        guid=guid,
     )
+
+
+def _guid_tail(value: str) -> str:
+    """Return the final GUID segment of a wire id path."""
+    return value.rsplit("/", 1)[-1]
+
+
+def _same_endpoint(left: Id, right: Id) -> bool:
+    """Return True when two wire ids refer to the same instance."""
+    return _guid_tail(left.value) == _guid_tail(right.value)
 
 
 def _ensure_link(
@@ -716,16 +725,37 @@ def _ensure_link(
         )
 
     for edge in graph.edges:
-        if (
-            edge.link_type == link_type
-            and edge.from_id == in_guid
-            and edge.to_id == out_guid
+        # libfits stores edges as out → in; we pass in=from_logical, out=to_logical.
+        if edge.link_type != link_type:
+            continue
+        if _same_endpoint(edge.from_id, out_guid) and _same_endpoint(
+            edge.to_id, in_guid
         ):
             edge_guid = edge.id
             if edge_guid is not None:
                 return Ok(CreatedObject(guid=edge_guid, name=link_name.value))
 
-    result = repo.new_link(link_type, in_guid, out_guid, name=link_name)
+    # Nested endpoints: omit explicit names so libfits autonumbers in nested scope.
+    # Explicit names collide on idempotent sync and can corrupt the registry.
+    nested = "/" in in_guid.value or "/" in out_guid.value
+    result = repo.new_link(
+        link_type,
+        in_guid,
+        out_guid,
+        name=None if nested else link_name,
+    )
+    if isinstance(result, Ok) and result.ok_value.name in {
+        "goal",
+        "initiative",
+        "project",
+        "milestone",
+    }:
+        return Err(
+            FitsError(
+                f"unexpected link create result for {link_type!r}",
+                code="link_create_failed",
+            )
+        )
     existing_guid = index.guid_for_name(link_name.value)
     return ignore_duplicate_link(
         result,
@@ -840,7 +870,7 @@ def init_pyfits_repo(root: Path) -> Result[None, FitsError]:
             init_res = repo.init()
             if isinstance(init_res, Err):
                 return init_res
-        boot = bootstrap_registry(repo)
+        boot = _bootstrap_session(repo, root)
         if isinstance(boot, Err):
             return boot
     return Ok(None)
@@ -883,15 +913,21 @@ def sync_roadmap(
         roadmap = load(root)
     except (ValueError, OSError) as exc:
         return Err(FitsError(str(exc), code="roadmap_load_failed"))
+
+    # Schema migration may rewrite registry.json; run before opening a long session.
+    pre = migrate_registry_schema(root)
+    if isinstance(pre, Err):
+        return pre
+
     open_result = Repo.open(root)
     if isinstance(open_result, Err):
         return open_result
     repo = open_result.ok_value
     with repo:
-        boot = bootstrap_registry(repo)
+        boot = _bootstrap_session(repo, root)
         if isinstance(boot, Err):
             return boot
-        graph_result = repo.output_graph()
+        graph_result = _reload_graph(repo)
         if isinstance(graph_result, Err):
             return graph_result
         graph = graph_result.ok_value
@@ -899,7 +935,7 @@ def sync_roadmap(
         migrated = _migrate_legacy_node_ids(repo, root, desired)
         if isinstance(migrated, Err):
             return migrated
-        graph_result = repo.output_graph()
+        graph_result = _reload_graph(repo)
         if isinstance(graph_result, Err):
             return graph_result
         graph = graph_result.ok_value

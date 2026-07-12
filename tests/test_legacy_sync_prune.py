@@ -11,11 +11,11 @@ from pyfits.result import Ok
 
 from bellman import layout
 from bellman.graph.desired import entity_node_id
-from bellman.graph.history import load_graph_history
+from bellman.graph.identity import InstanceIndex
 from bellman.graph.sync import init_pyfits_repo, libfits_available, sync_roadmap
 
 
-def _write_registry_instances(root: Path, instances: list[dict[str, str]]) -> None:
+def _write_registry_instances(root: Path, instances: list[dict[str, object]]) -> None:
     registry_path = root / ".fits" / "registry.json"
     data = json.loads(registry_path.read_text(encoding="utf-8"))
     data["instances"] = instances
@@ -33,22 +33,30 @@ def test_sync_prune_tolerates_legacy_registry_ghosts(tmp_path: Path) -> None:
     assert isinstance(sync_roadmap(tmp_path), Ok)
 
     qualified = entity_node_id("goal", "manual-goal")
-    history = load_graph_history(tmp_path)
-    assert isinstance(history, Ok)
-    guid = history.ok_value.instances[0].guid
+    index = InstanceIndex.load(tmp_path)
+    assert isinstance(index, Ok)
+    kind = index.ok_value.by_name["goal"]
+    goal = index.ok_value.by_name[qualified]
     _write_registry_instances(
         tmp_path,
         [
             {
-                "guid": guid,
+                "guid": kind.guid,
+                "name": "goal",
+                "type": "kind",
+                "kind": "node",
+                "scope": "root",
+            },
+            {
+                "guid": goal.guid,
                 "name": "manual-goal",
                 "type": "goal",
                 "kind": "node",
                 "scope": "root",
             },
             {
-                "guid": guid,
-                "name": qualified,
+                "guid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                "name": "goal--manual-goal",
                 "type": "goal",
                 "kind": "node",
                 "scope": "root",
@@ -62,13 +70,8 @@ def test_sync_prune_tolerates_legacy_registry_ghosts(tmp_path: Path) -> None:
     open_result = Repo.open(tmp_path)
     assert isinstance(open_result, Ok)
     with open_result.ok_value as repo:
-        validation = repo.validate()
-    history_after = load_graph_history(tmp_path)
-    assert isinstance(history_after, Ok)
-    node_names = {
-        inst.instance_name
-        for inst in history_after.ok_value.instances
-        if inst.kind == "node"
-    }
-    assert qualified in node_names
+        validation = repo.validate(include_nested_subgraphs=True)
+    index_after = InstanceIndex.load(tmp_path)
+    assert isinstance(index_after, Ok)
+    assert qualified in index_after.ok_value.live_node_names()
     assert isinstance(validation, Ok)

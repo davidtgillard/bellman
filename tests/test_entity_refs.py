@@ -15,6 +15,7 @@ from bellman.graph.desired import (
     natural_name_from_node_id,
     resolve_entity_ref,
     scope_node_id,
+    wp_node_id,
 )
 from bellman.graph.legacy import is_legacy_flat_node_id, registry_needs_id_migration
 from bellman.model import Goal, Initiative, Project, Roadmap
@@ -25,19 +26,19 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 
 
 def test_entity_node_id_qualifies_type() -> None:
-    assert entity_node_id("goal", "reduce-churn") == "goal--reduce-churn"
+    assert entity_node_id("goal", "reduce-churn") == "goal/reduce-churn"
 
 
 def test_natural_name_from_node_id() -> None:
+    assert natural_name_from_node_id("goal/reduce-churn") == "reduce-churn"
     assert natural_name_from_node_id("goal--reduce-churn") == "reduce-churn"
-    assert (
-        natural_name_from_node_id("billing-redesign--wp-a") == "billing-redesign--wp-a"
-    )
+    assert natural_name_from_node_id("project/billing-redesign/wp-a") == "wp-a"
 
 
 def test_goal_and_milestone_node_ids() -> None:
-    assert goal_node_id("reduce-churn") == "goal--reduce-churn"
-    assert milestone_node_id("ga-release") == "milestone--ga-release"
+    assert goal_node_id("reduce-churn") == "goal/reduce-churn"
+    assert milestone_node_id("ga-release") == "milestone/ga-release"
+    assert wp_node_id("billing-redesign", "wp-a") == "project/billing-redesign/wp-a"
 
 
 def test_scope_node_id_uses_type() -> None:
@@ -57,13 +58,13 @@ def test_scope_node_id_uses_type() -> None:
         motivation="",
         detailed_description="",
     )
-    assert scope_node_id(initiative) == "initiative--explore-ml-ranking"
-    assert scope_node_id(project) == "project--billing-redesign"
+    assert scope_node_id(initiative) == "initiative/explore-ml-ranking"
+    assert scope_node_id(project) == "project/billing-redesign"
 
 
 def test_resolve_entity_ref_unambiguous() -> None:
     roadmap = load(EXAMPLES)
-    assert resolve_entity_ref(roadmap, "reduce-churn") == "goal--reduce-churn"
+    assert resolve_entity_ref(roadmap, "reduce-churn") == "goal/reduce-churn"
     assert resolve_entity_ref(roadmap, "missing-entity") == "missing-entity"
 
 
@@ -96,13 +97,16 @@ def test_resolve_entity_ref_ambiguous() -> None:
 def test_is_legacy_flat_node_id() -> None:
     assert is_legacy_flat_node_id("goal", "reduce-churn")
     assert not is_legacy_flat_node_id("goal", "goal--reduce-churn")
+    assert not is_legacy_flat_node_id("goal", "goal/reduce-churn")
     assert not is_legacy_flat_node_id("work_package", "billing-redesign--wp-a")
 
 
 def test_registry_needs_id_migration() -> None:
     actual = {DesiredNode("goal", "reduce-churn")}
-    desired = {DesiredNode("goal", "goal--reduce-churn")}
+    desired = {DesiredNode("goal", "goal/reduce-churn")}
     assert registry_needs_id_migration(actual, desired)
+    actual_dash = {DesiredNode("goal", "goal--reduce-churn")}
+    assert registry_needs_id_migration(actual_dash, desired)
 
 
 def test_validate_ambiguous_scope_dependency(tmp_path: Path) -> None:
