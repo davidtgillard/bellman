@@ -14,6 +14,7 @@ from bellman.graph.identity import InstanceIndex
 
 _REGISTRY_PATH = Path(".fits") / "registry.json"
 _LINKS_PATH = Path("links") / "links.jsonc"
+_SUBGRAPH_FILE = "subgraph.jsonc"
 _JSONC_COMMENT_RE = re.compile(r"//.*?$", re.MULTILINE)
 
 
@@ -59,11 +60,14 @@ def _link_is_valid(
     registered: set[str],
     node_guids: set[str],
     drop_touching_guids: set[str],
+    drop_link_guids: set[str],
 ) -> bool:
     link_guid = link.get("guid")
     in_guid = link.get("in")
     out_guid = link.get("out")
     if not isinstance(link_guid, str):
+        return False
+    if link_guid in drop_link_guids:
         return False
     if not isinstance(in_guid, str) or not isinstance(out_guid, str):
         return False
@@ -76,31 +80,78 @@ def _link_is_valid(
     return True
 
 
+def _drop_links_from_subgraphs(root: Path, drop_link_guids: set[str]) -> int:
+    """Remove explicit link guids from nested ``subgraph.jsonc`` artifacts."""
+    if not drop_link_guids:
+        return 0
+    nodes_dir = root / "nodes"
+    if not nodes_dir.is_dir():
+        return 0
+    removed = 0
+    for sub_path in nodes_dir.rglob(_SUBGRAPH_FILE):
+        try:
+            sub = json.loads(sub_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        links = sub.get("links", [])
+        if not isinstance(links, list):
+            continue
+        kept_links: list[dict[str, Any]] = []
+        for item in links:
+            if not isinstance(item, dict):
+                continue
+            guid = item.get("guid")
+            if isinstance(guid, str) and guid in drop_link_guids:
+                removed += 1
+                continue
+            kept_links.append(item)
+        if len(kept_links) == len(links):
+            continue
+        sub["links"] = kept_links
+        try:
+            sub_path.write_text(json.dumps(sub, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            continue
+    return removed
+
+
 def reconcile_link_artifacts(
     root: Path,
     *,
     drop_touching_nodes: set[str] | None = None,
+    drop_link_guids: set[str] | None = None,
 ) -> Result[int, FitsError]:
     """Drop invalid ``links.jsonc`` rows and stale link registry instances.
 
     Removes links when:
+    - the link guid is listed in ``drop_link_guids``
     - the link guid is not registered in ``instances[]``
     - either endpoint guid is not a registered node instance
     - either endpoint guid matches a node listed in ``drop_touching_nodes``
+
+    Also removes matching guids from nested ``subgraph.jsonc`` artifacts under
+    ``nodes/`` (libfits nested links are not always removable via ``repo.remove``).
 
     Args:
         root: Roadmap root directory.
         drop_touching_nodes: Optional logical node names whose incident links
             should be removed.
+        drop_link_guids: Optional wire or child link guids to remove explicitly.
 
     Returns:
         ``Ok(count)`` with the number of removed link rows (jsonc + registry).
         ``Err(FitsError)`` when artifacts cannot be read or written.
     """
+    explicit_drop_guids = set(drop_link_guids or ())
+    removed_subgraphs = _drop_links_from_subgraphs(root, explicit_drop_guids)
+
     registry_path = root / _REGISTRY_PATH
     links_path = root / _LINKS_PATH
-    if not registry_path.is_file() or not links_path.is_file():
-        return Ok(0)
+    if not registry_path.is_file():
+        return Ok(removed_subgraphs)
+
+    if not links_path.is_file():
+        return Ok(removed_subgraphs)
 
     try:
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -134,6 +185,7 @@ def reconcile_link_artifacts(
             registered=registered,
             node_guids=node_guids,
             drop_touching_guids=drop_touching_guids,
+            drop_link_guids=explicit_drop_guids,
         ):
             kept_links.append(item)
 
@@ -151,12 +203,17 @@ def reconcile_link_artifacts(
     for inst in instances:
         if not isinstance(inst, dict):
             continue
-        if inst.get("kind") == "link" and inst.get("guid") not in kept_link_guids:
+        guid = inst.get("guid")
+        if (
+            inst.get("kind") == "link"
+            and isinstance(guid, str)
+            and (guid not in kept_link_guids or guid in explicit_drop_guids)
+        ):
             removed_registry += 1
             continue
         kept_instances.append(inst)
 
-    removed = removed_links + removed_registry
+    removed = removed_links + removed_registry + removed_subgraphs
     if removed == 0:
         return Ok(0)
 

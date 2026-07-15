@@ -12,6 +12,7 @@ from pyfits.result import Err, Ok, Result
 from bellman.graph.desired import (
     DesiredLink,
     DesiredNode,
+    desired_link_from_graph_edge,
     desired_links,
     desired_nodes,
     natural_name_from_node_id,
@@ -106,11 +107,14 @@ def _actual_links(
     for edge in graph.edges:
         if edge.link_type not in managed:
             continue
-        from_name = index.name_for_guid(edge.from_id.value)
-        to_name = index.name_for_guid(edge.to_id.value)
-        if from_name is None or to_name is None:
-            continue
-        links.add(DesiredLink(edge.link_type, from_name, to_name))
+        desired = desired_link_from_graph_edge(
+            link_type=edge.link_type,
+            from_id_value=edge.from_id.value,
+            to_id_value=edge.to_id.value,
+            index=index,
+        )
+        if desired is not None:
+            links.add(desired)
     return Ok(links)
 
 

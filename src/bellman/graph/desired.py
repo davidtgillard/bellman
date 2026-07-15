@@ -7,6 +7,7 @@ from pathlib import Path
 
 from bellman import layout
 from bellman.graph import link_naming
+from bellman.graph.identity import InstanceIndex
 from bellman.model import Initiative, PrecedenceEdge, Project, Roadmap, WorkPackage
 
 _ENTITY_KINDS = ("initiative", "project", "goal", "milestone")
@@ -27,6 +28,34 @@ class DesiredLink:
     link_type: str
     from_id: str
     to_id: str
+
+
+def desired_link_from_graph_edge(
+    *,
+    link_type: str,
+    from_id_value: str,
+    to_id_value: str,
+    index: InstanceIndex,
+) -> DesiredLink | None:
+    """Map a libfits graph edge to :class:`DesiredLink` semantics.
+
+    libfits stores directed edges as out → in. Bellman ``DesiredLink`` uses
+    ``from_id`` for the predecessor (in) and ``to_id`` for the successor (out).
+
+    Args:
+        link_type: Registered link type on the edge.
+        from_id_value: Wire id for the graph edge ``from`` endpoint (out).
+        to_id_value: Wire id for the graph edge ``to`` endpoint (in).
+        index: Live instance index for logical name resolution.
+
+    Returns:
+        A :class:`DesiredLink` when both endpoints resolve, else ``None``.
+    """
+    predecessor = index.name_for_guid(to_id_value)
+    successor = index.name_for_guid(from_id_value)
+    if predecessor is None or successor is None:
+        return None
+    return DesiredLink(link_type, predecessor, successor)
 
 
 def entity_node_id(type_name: str, name: str) -> str:

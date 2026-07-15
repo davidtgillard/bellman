@@ -13,6 +13,9 @@ from pyfits.result import Err, Ok, Result
 from bellman import layout
 from bellman.graph import link_naming
 from bellman.graph.desired import (
+    DesiredLink,
+    desired_link_from_graph_edge,
+    desired_links,
     desired_node_ids,
     entity_node_id,
     flatten_wps,
@@ -38,6 +41,7 @@ from bellman.graph.registry import (
     KIND_TYPE,
     bootstrap_registry,
     ensure_kind_roots,
+    markdown_sync_link_types,
 )
 from bellman.graph.schema_migrate import migrate_registry_schema
 from bellman.model import Goal, Initiative, Milestone, Project, Roadmap
@@ -172,12 +176,47 @@ def _prune_stale_graph(
     root: Path,
     graph: Graph,
     desired: set[str],
+    desired_link_set: set[DesiredLink],
 ) -> Result[Graph, FitsError]:
     """Remove stale links and nodes from the registry and graph snapshot."""
     index_result = InstanceIndex.load(root)
     if isinstance(index_result, Err):
         return Err(_history_to_fits_error(index_result.err_value))
     index = index_result.ok_value
+
+    prune_link_types = markdown_sync_link_types()
+    stale_managed_links = [
+        edge
+        for edge in graph.edges
+        if edge.link_type in prune_link_types
+        and (
+            desired_link := desired_link_from_graph_edge(
+                link_type=edge.link_type,
+                from_id_value=edge.from_id.value,
+                to_id_value=edge.to_id.value,
+                index=index,
+            )
+        )
+        is not None
+        and desired_link not in desired_link_set
+    ]
+    stale_managed_link_guids: set[str] = set()
+    for edge in stale_managed_links:
+        if edge.id is None:
+            continue
+        stale_managed_link_guids.add(edge.id.value)
+        stale_managed_link_guids.add(edge.id.value.rsplit("/", 1)[-1])
+    if stale_managed_link_guids:
+        reconciled = reconcile_link_artifacts(
+            root,
+            drop_link_guids=stale_managed_link_guids,
+        )
+        if isinstance(reconciled, Err):
+            return reconciled
+        reloaded = _reload_graph(repo)
+        if isinstance(reloaded, Err):
+            return reloaded
+        graph = reloaded.ok_value
 
     stale_edges = [
         edge
@@ -231,7 +270,7 @@ def _prune_stale_graph(
     if isinstance(repaired, Err):
         return repaired
 
-    if stale_nodes or stale_edges:
+    if stale_nodes or stale_edges or stale_managed_link_guids:
         reloaded = _reload_graph(repo)
         if isinstance(reloaded, Err):
             return reloaded
@@ -1052,7 +1091,13 @@ def sync_roadmap(
                 return dep_sync
 
         if prune:
-            pruned = _prune_stale_graph(repo, root, graph, desired)
+            pruned = _prune_stale_graph(
+                repo,
+                root,
+                graph,
+                desired,
+                desired_links(roadmap),
+            )
             if isinstance(pruned, Err):
                 return pruned
             graph = pruned.ok_value

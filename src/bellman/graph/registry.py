@@ -44,6 +44,11 @@ def bellman_link_types() -> frozenset[str]:
     return frozenset(types)
 
 
+def markdown_sync_link_types() -> frozenset[str]:
+    """Link types derived from markdown and pruned during ``sync_roadmap``."""
+    return frozenset(t for t in bellman_link_types() if t != "promoted_from")
+
+
 def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
     """Register bellman types if not already present.
 
