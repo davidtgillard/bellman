@@ -13,7 +13,7 @@ from bellman.update.download import download_asset
 from bellman.update.github import (
     ReleaseAsset,
     fetch_release,
-    latest_linux_asset,
+    latest_platform_asset,
     parse_version_from_asset_name,
 )
 from bellman.update.install import (
@@ -61,7 +61,7 @@ def check_for_update(
 
     try:
         release = fetch_release(settings)
-        asset = latest_linux_asset(release)
+        asset = latest_platform_asset(release, settings)
     except OSError as exc:
         if record_check:
             state.touch_check_time()
@@ -75,7 +75,7 @@ def check_for_update(
             state.touch_check_time()
         return CheckResult(
             kind="check_failed",
-            message="no linux-x86_64 release asset found",
+            message="no matching release asset found",
         )
 
     version_str = parse_version_from_asset_name(asset.name)

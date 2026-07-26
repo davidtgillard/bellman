@@ -12,11 +12,29 @@ import semver
 
 from bellman.update.settings import UpdateSettings
 
-_ASSET_VERSION_RE = re.compile(r"bellman-(.+?)-linux-x86_64(?:\.sha256)?$")
+_PLATFORM_SUFFIXES = (
+    "linux-x86_64",
+    "windows-x86_64.exe",
+    "macos-arm64",
+)
+_ASSET_VERSION_RE = re.compile(
+    r"bellman-(.+?)-(" + "|".join(re.escape(s) for s in _PLATFORM_SUFFIXES) + r")"
+    r"(?:\.sha256)?$"
+)
 
 
 @dataclass(frozen=True)
 class ReleaseAsset:
+    """A downloadable GitHub release asset.
+
+    Attributes:
+        id: GitHub asset id.
+        name: Asset filename.
+        url: API URL for authenticated download.
+        browser_download_url: Public browser download URL.
+        updated_at: ISO-8601 last-updated timestamp.
+    """
+
     id: int
     name: str
     url: str
@@ -26,6 +44,13 @@ class ReleaseAsset:
 
 @dataclass(frozen=True)
 class GitHubRelease:
+    """GitHub release metadata used for self-update.
+
+    Attributes:
+        tag_name: Release tag (for example ``dev``).
+        assets: Non-checksum release assets.
+    """
+
     tag_name: str
     assets: tuple[ReleaseAsset, ...]
 
@@ -52,6 +77,17 @@ def _parse_asset(raw: dict[str, object]) -> ReleaseAsset | None:
 
 
 def fetch_release(settings: UpdateSettings) -> GitHubRelease:
+    """Fetch release metadata for the configured tag.
+
+    Args:
+        settings: Update settings with repository, tag, and timeout.
+
+    Returns:
+        Parsed release including downloadable assets.
+
+    Raises:
+        OSError: When the GitHub API request fails.
+    """
     api_url = (
         f"https://api.github.com/repos/{settings.repository}"
         f"/releases/tags/{settings.release_tag}"
@@ -85,30 +121,60 @@ def fetch_release(settings: UpdateSettings) -> GitHubRelease:
 
 
 def parse_version_from_asset_name(name: str) -> str | None:
+    """Extract the embedded version from a release asset filename.
+
+    Args:
+        name: Asset filename such as ``bellman-0.1.0-linux-x86_64``.
+
+    Returns:
+        Version string when the name matches a known platform suffix, else
+        ``None``.
+    """
     match = _ASSET_VERSION_RE.match(name)
     if match:
         return match.group(1)
     return None
 
 
-def pick_linux_asset(
+def pick_platform_asset(
     release: GitHubRelease, settings: UpdateSettings, version: str
 ) -> ReleaseAsset | None:
+    """Pick the release asset matching ``settings.asset_pattern`` for ``version``.
+
+    Args:
+        release: Fetched GitHub release.
+        settings: Settings containing the asset name pattern.
+        version: Version string to substitute into the pattern.
+
+    Returns:
+        Matching asset, or ``None`` when no asset matches the pattern.
+    """
     expected = settings.asset_pattern.format(version=version)
     for asset in release.assets:
         if asset.name == expected:
             return asset
-    for asset in release.assets:
-        if parse_version_from_asset_name(asset.name) == version:
-            return asset
     return None
 
 
-def latest_linux_asset(release: GitHubRelease) -> ReleaseAsset | None:
+def latest_platform_asset(
+    release: GitHubRelease, settings: UpdateSettings
+) -> ReleaseAsset | None:
+    """Return the highest-semver asset matching the configured platform pattern.
+
+    Args:
+        release: Fetched GitHub release.
+        settings: Settings whose ``asset_pattern`` selects the host platform.
+
+    Returns:
+        Newest matching asset, or ``None`` when none match the pattern.
+    """
     candidates: list[tuple[semver.Version, ReleaseAsset]] = []
     for asset in release.assets:
         ver = parse_version_from_asset_name(asset.name)
         if ver is None:
+            continue
+        expected = settings.asset_pattern.format(version=ver)
+        if asset.name != expected:
             continue
         try:
             candidates.append((semver.Version.parse(ver), asset))

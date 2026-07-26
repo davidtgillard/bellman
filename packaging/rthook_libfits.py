@@ -1,4 +1,4 @@
-"""PyInstaller runtime hook: set PYFITS_LIB_PATH to bundled libfits.so."""
+"""PyInstaller runtime hook: set PYFITS_LIB_PATH to the bundled libfits library."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     meipass = Path(sys._MEIPASS)
-    for name in ("libfits.so", "libfits"):
+    for name in ("libfits.so", "libfits.dll", "libfits.dylib", "libfits"):
         candidate = meipass / name
         if candidate.is_file():
             os.environ["PYFITS_LIB_PATH"] = str(candidate)

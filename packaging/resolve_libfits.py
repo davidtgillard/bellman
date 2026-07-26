@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Print path to libfits.so for PyInstaller bundling."""
+"""Print path to the host-platform libfits shared library for PyInstaller bundling."""
 
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
+
+_LIB_NAMES = ("libfits.so", "libfits.dll", "libfits.dylib", "libfits")
 
 
 def _from_env() -> Path | None:
@@ -35,14 +37,18 @@ def _from_pyfits() -> Path | None:
 
 
 def _search_common_paths() -> Path | None:
-    candidates = [
-        Path("../fits/target/release/libfits.so"),
-        Path("../fits/libfits.so"),
-        Path("/usr/local/lib/libfits.so"),
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
+    roots = (
+        Path("../fits/target/release"),
+        Path("../fits"),
+        Path("../fits/zig-out/lib"),
+        Path("../fits/zig-out/bin"),
+        Path("/usr/local/lib"),
+    )
+    for root in roots:
+        for name in _LIB_NAMES:
+            candidate = root / name
+            if candidate.is_file():
+                return candidate.resolve()
     return None
 
 
@@ -53,7 +59,7 @@ def main() -> None:
             print(found)
             return
     print(
-        "libfits.so not found; set LIBFITS_PATH or build ../fits",
+        "libfits shared library not found; set LIBFITS_PATH or build ../fits",
         file=sys.stderr,
     )
     sys.exit(1)

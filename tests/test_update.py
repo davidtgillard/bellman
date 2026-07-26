@@ -18,7 +18,13 @@ from bellman.update.check import (
     check_for_update,
     should_run_background_check,
 )
-from bellman.update.github import GitHubRelease, ReleaseAsset, latest_linux_asset
+from bellman.update.github import (
+    GitHubRelease,
+    ReleaseAsset,
+    latest_platform_asset,
+    parse_version_from_asset_name,
+    pick_platform_asset,
+)
 from bellman.update.install import is_frozen, verify_update_permissions
 from bellman.update.paths import (
     running_executable,
@@ -26,15 +32,30 @@ from bellman.update.paths import (
     state_write_path,
     target_binary_path,
 )
-from bellman.update.settings import UpdateSettings
+from bellman.update.settings import UpdateSettings, default_asset_pattern
 from bellman.update.state import BellmanState
 
 runner = CliRunner()
 V0_1_0 = semver.Version.parse("0.1.0")
+LINUX_PATTERN = "bellman-{version}-linux-x86_64"
+WINDOWS_PATTERN = "bellman-{version}-windows-x86_64.exe"
+MACOS_PATTERN = "bellman-{version}-macos-arm64"
 
 
-def _asset(asset_id: int, version: str) -> ReleaseAsset:
-    name = f"bellman-{version}-linux-x86_64"
+def _settings(asset_pattern: str = LINUX_PATTERN) -> UpdateSettings:
+    return UpdateSettings(
+        check_interval_hours=24,
+        timeout_seconds=5,
+        repository="davidtgillard/bellman",
+        release_tag="dev",
+        asset_pattern=asset_pattern,
+    )
+
+
+def _asset(
+    asset_id: int, version: str, *, pattern: str = LINUX_PATTERN
+) -> ReleaseAsset:
+    name = pattern.format(version=version)
     return ReleaseAsset(
         id=asset_id,
         name=name,
@@ -62,18 +83,75 @@ def test_is_update_available_up_to_date() -> None:
     assert not _is_update_available(installed, 200, latest, _asset(200, "0.2.0"))
 
 
-def test_latest_linux_asset_picks_highest_semver() -> None:
+def test_latest_platform_asset_picks_highest_semver() -> None:
     release = GitHubRelease(
         tag_name="dev",
         assets=(
             _asset(100, "0.1.0"),
             _asset(200, "0.2.0"),
             _asset(150, "0.1.5"),
+            _asset(300, "0.3.0", pattern=WINDOWS_PATTERN),
         ),
     )
-    asset = latest_linux_asset(release)
+    asset = latest_platform_asset(release, _settings())
     assert asset is not None
     assert asset.id == 200
+
+
+def test_latest_platform_asset_respects_windows_pattern() -> None:
+    release = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            _asset(100, "0.2.0"),
+            _asset(200, "0.1.0", pattern=WINDOWS_PATTERN),
+            _asset(300, "0.1.5", pattern=WINDOWS_PATTERN),
+        ),
+    )
+    asset = latest_platform_asset(release, _settings(WINDOWS_PATTERN))
+    assert asset is not None
+    assert asset.id == 300
+    assert asset.name.endswith(".exe")
+
+
+def test_pick_platform_asset_exact_match() -> None:
+    release = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            _asset(100, "0.1.0"),
+            _asset(200, "0.1.0", pattern=MACOS_PATTERN),
+        ),
+    )
+    picked = pick_platform_asset(release, _settings(MACOS_PATTERN), "0.1.0")
+    assert picked is not None
+    assert picked.id == 200
+
+
+def test_parse_version_from_windows_asset_name() -> None:
+    assert parse_version_from_asset_name("bellman-0.1.0-windows-x86_64.exe") == "0.1.0"
+
+
+def test_default_asset_pattern_linux(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("bellman.update.settings.sys.platform", "linux")
+    monkeypatch.setattr("bellman.update.settings.platform.machine", lambda: "x86_64")
+    assert default_asset_pattern() == LINUX_PATTERN
+
+
+def test_default_asset_pattern_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("bellman.update.settings.sys.platform", "win32")
+    monkeypatch.setattr("bellman.update.settings.platform.machine", lambda: "AMD64")
+    assert default_asset_pattern() == WINDOWS_PATTERN
+
+
+def test_default_asset_pattern_macos_arm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("bellman.update.settings.sys.platform", "darwin")
+    monkeypatch.setattr("bellman.update.settings.platform.machine", lambda: "arm64")
+    assert default_asset_pattern() == MACOS_PATTERN
 
 
 @patch("bellman.update.check.fetch_release")
@@ -83,13 +161,7 @@ def test_check_for_update_available(mock_fetch: MagicMock) -> None:
         assets=(_asset(200, "0.2.0"),),
     )
     state = BellmanState(installed_version="0.1.0", installed_asset_id=100)
-    settings = UpdateSettings(
-        check_interval_hours=24,
-        timeout_seconds=5,
-        repository="davidtgillard/bellman",
-        release_tag="dev",
-        asset_pattern="bellman-{version}-linux-x86_64",
-    )
+    settings = _settings()
     with patch("bellman.update.check.get_version", return_value=V0_1_0):
         result = check_for_update(settings=settings, state=state, record_check=False)
     assert result.kind == "update_available"
@@ -103,26 +175,14 @@ def test_check_for_update_up_to_date(mock_fetch: MagicMock) -> None:
         assets=(_asset(100, "0.1.0"),),
     )
     state = BellmanState(installed_version="0.1.0", installed_asset_id=100)
-    settings = UpdateSettings(
-        check_interval_hours=24,
-        timeout_seconds=5,
-        repository="davidtgillard/bellman",
-        release_tag="dev",
-        asset_pattern="bellman-{version}-linux-x86_64",
-    )
+    settings = _settings()
     with patch("bellman.update.check.get_version", return_value=V0_1_0):
         result = check_for_update(settings=settings, state=state, record_check=False)
     assert result.kind == "up_to_date"
 
 
 def test_should_run_background_check_interval() -> None:
-    settings = UpdateSettings(
-        check_interval_hours=24,
-        timeout_seconds=5,
-        repository="davidtgillard/bellman",
-        release_tag="dev",
-        asset_pattern="bellman-{version}-linux-x86_64",
-    )
+    settings = _settings()
     assert should_run_background_check(BellmanState(), settings)
     recent = BellmanState(last_update_check=datetime.now(UTC) - timedelta(hours=1))
     assert not should_run_background_check(recent, settings)

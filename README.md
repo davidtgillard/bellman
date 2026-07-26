@@ -4,7 +4,15 @@ Markdown-first roadmap planning built on [pyfits](https://github.com/davidtgilla
 
 ## Install
 
-Download the latest **linux-x86_64** binary from the rolling [`dev` release](https://github.com/davidtgillard/bellman/releases/tag/dev):
+Download a platform binary from the rolling [`dev` release](https://github.com/davidtgillard/bellman/releases/tag/dev). Asset names include the version from `pyproject.toml`:
+
+| Platform | Asset |
+|----------|--------|
+| Linux x86_64 | `bellman-{version}-linux-x86_64` |
+| Windows x86_64 | `bellman-{version}-windows-x86_64.exe` |
+| macOS arm64 | `bellman-{version}-macos-arm64` |
+
+**Linux x86_64:**
 
 ```bash
 curl -fsSL -o bellman \
@@ -13,7 +21,21 @@ chmod +x bellman
 sudo mv bellman /usr/local/bin/   # or any directory on your PATH
 ```
 
-The asset name includes the version from `pyproject.toml` and changes when the version is bumped.
+**macOS arm64:**
+
+```bash
+curl -fsSL -o bellman \
+  "https://github.com/davidtgillard/bellman/releases/download/dev/bellman-0.1.0-macos-arm64"
+chmod +x bellman
+sudo mv bellman /usr/local/bin/
+```
+
+**Windows x86_64** (PowerShell):
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/davidtgillard/bellman/releases/download/dev/bellman-0.1.0-windows-x86_64.exe" -OutFile bellman.exe
+# Move bellman.exe onto your PATH
+```
 
 ### Self-update
 
@@ -22,7 +44,7 @@ bellman update --check   # check only; exit 1 if a newer build is available
 bellman update           # download and replace the binary (PyInstaller builds only)
 ```
 
-Bellman checks for updates in the background (at most once per 24 hours by default) when you run any other subcommand.
+`bellman update` selects the asset for the host platform automatically. Bellman also checks for updates in the background (at most once per 24 hours by default) when you run any other subcommand.
 
 After upgrading to a release that uses libfits GUID wire ids (protocol v2), re-initialize each roadmap's pyfits tree: remove `.fits/`, `nodes/`, and `links/`, then run `bellman init .` and `bellman sync .`. Markdown remains the source of truth.
 
@@ -135,7 +157,7 @@ Links are identified as `{link_type}:{from}->{to}`. Precedence edges use registe
 
 ## libfits
 
-Graph sync requires `libfits.so` (same as pyfits). The PyInstaller binary bundles libfits when built with `LIBFITS_PATH` set. For source installs, build the sibling [fits](https://github.com/davidtgillard/fits) checkout or set `PYFITS_LIB_PATH` to the shared library path.
+Graph sync requires the host-platform libfits shared library (`libfits.so`, `libfits.dll`, or `libfits.dylib`; same as pyfits). The PyInstaller binary bundles libfits when built with `LIBFITS_PATH` set. For source installs, run `python ../pyfits.git/scripts/fetch_libfits.py`, build the sibling [fits](https://github.com/davidtgillard/fits) checkout, or set `PYFITS_LIB_PATH`.
 
 ## Development
 
@@ -149,9 +171,10 @@ uv run ruff check src tests
 
 ```bash
 uv sync --all-groups
-export LIBFITS_PATH=/path/to/libfits.so   # or build ../fits
+python ../pyfits.git/scripts/fetch_libfits.py   # or export LIBFITS_PATH=...
 uv run python packaging/write_build_version.py
 uv run pyinstaller packaging/bellman.spec --noconfirm
+uv run python packaging/package_release.py --platform linux-x86_64  # or windows-x86_64 / macos-arm64
 ./dist/bellman version
 ```
 
