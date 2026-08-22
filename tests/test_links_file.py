@@ -84,7 +84,7 @@ def test_prune_deleted_initiative_with_scope_dependency(tmp_path: Path) -> None:
     dep_path.write_text(
         dep_path.read_text(encoding="utf-8").replace(
             "## Dependencies\n\n",
-            "## Dependencies\n\n- after: target-init [FS, Mandatory]\n",
+            "## Dependencies\n\n- target-init [FS, Mandatory]\n",
         ),
         encoding="utf-8",
     )

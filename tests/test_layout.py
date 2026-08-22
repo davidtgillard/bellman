@@ -188,13 +188,13 @@ def test_rename_rewrites_scope_dependency(tmp_path: Path) -> None:
     layout.create_initiative(tmp_path, "follower")
     initiative = layout.initiative_path(tmp_path, "follower")
     initiative.write_text(
-        initiative.read_text(encoding="utf-8") + "- after: old-dep [FS, Mandatory]\n",
+        initiative.read_text(encoding="utf-8") + "- old-dep [FS, Mandatory]\n",
         encoding="utf-8",
     )
     layout.rename_entity(tmp_path, "old-dep", "new-dep")
     text = initiative.read_text(encoding="utf-8")
-    assert "after: new-dep [FS, Mandatory]" in text
-    assert "after: old-dep" not in text
+    assert "- new-dep [FS, Mandatory]" in text
+    assert "old-dep" not in text
 
 
 def test_rename_project_rewrites_cross_project_wp_ref(tmp_path: Path) -> None:
@@ -208,11 +208,11 @@ def test_rename_project_rewrites_cross_project_wp_ref(tmp_path: Path) -> None:
 work_packages:
   - title: Do Thing
     dependencies:
-      - after: old-proj/wp-slug [FS, Mandatory]
+      - old-proj/wp-slug [FS, Mandatory]
 """,
         encoding="utf-8",
     )
     layout.rename_entity(tmp_path, "old-proj", "new-proj", kind="project")
     text = wp_path.read_text(encoding="utf-8")
-    assert "after: new-proj/wp-slug [FS, Mandatory]" in text
+    assert "new-proj/wp-slug [FS, Mandatory]" in text
     assert "old-proj/wp-slug" not in text

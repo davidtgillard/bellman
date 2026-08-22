@@ -104,6 +104,8 @@ bellman rename goal system-mci renamed-goal   # when names collide across types
 bellman plugin list
 bellman plugin my-plugin
 bellman report wbs tree --project billing-redesign   # PERT tree to stdout
+bellman report dependencies                          # all precedence edges
+bellman report deps beta                             # predecessors/successors of beta
 ```
 
 `validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
@@ -112,6 +114,31 @@ bellman report wbs tree --project billing-redesign   # PERT tree to stdout
 
 `rename` moves the entity on disk (initiative, project, milestone, or goal), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Use a bare name when it is unambiguous, a layout path such as `goals/foo.md` to pick one of several entities with the same name, or a type subcommand when initiative and goal (for example) share a name: `bellman rename goal foo bar`.
 
+## Precedence dependencies
+
+Declare predecessors **only on the successor** (the entity that depends on them). There is no `after:` / `before:` keyword.
+
+**Initiatives and projects** — under `## Dependencies`:
+
+```markdown
+## Dependencies
+
+- other-initiative [FS, Mandatory]
+```
+
+**Work packages** — in `work-packages.yaml` on the dependent package:
+
+```yaml
+dependencies:
+  - predecessor: wp-setup
+    relation: FS
+    hardness: Mandatory
+  # or: - wp-setup [FS, Mandatory]
+```
+
+Relation is one of `FF`, `FS`, `SF`, `SS`. Hardness is `Mandatory`, `Discretionary`, or `Optional`.
+
+Use `bellman report dependencies` (alias `deps`) to list all edges, or pass an entity name / `project/slug` to see what it depends on and what depends on it.
 ## Plugins
 
 Repo-local Python plugins live under `plugin/{name}/` in the roadmap root. Each plugin exports a `PLUGIN` object (`BellmanPlugin` from `bellman.plugin`). Plugins require a **Python install** of bellman (`uv run bellman` or `pip install`); the standalone PyInstaller binary cannot load arbitrary repo Python.
@@ -124,7 +151,7 @@ bellman plugin --path /path/to/roadmap my-plugin --help    # per-plugin argparse
 
 When the shell cwd is inside the roadmap tree, omit `--path`; bellman discovers the root automatically.
 
-Example `plugin/report-deps/__init__.py`:
+Example `plugin/report-deps/__init__.py` (prefer built-in `bellman report dependencies` for this use case):
 
 ```python
 from bellman.plugin import (

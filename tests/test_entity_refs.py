@@ -116,7 +116,7 @@ def test_validate_ambiguous_scope_dependency(tmp_path: Path) -> None:
     initiative_path = layout.initiative_path(tmp_path, "system-mci")
     content = initiative_path.read_text(encoding="utf-8")
     initiative_path.write_text(
-        content + "- after: system-mci [FS, Mandatory]\n",
+        content + "- system-mci [FS, Mandatory]\n",
         encoding="utf-8",
     )
     roadmap = load(tmp_path)

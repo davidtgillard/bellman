@@ -29,6 +29,7 @@ from bellman.graph.sync import (
 )
 from bellman.model import Roadmap
 from bellman.plugin.cli import register_plugin_command
+from bellman.report.dependencies import write_dependencies_report
 from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
 from bellman.report.wbs_tree import write_wbs_tree
 from bellman.roadmap import load, load_for_validation
@@ -628,6 +629,32 @@ def report_wbs_tree(
         output=None,
     )
     _write_wbs_tree_report(effective_path, project=effective_project)
+
+
+def _write_dependencies_report(
+    path: Path | None,
+    *,
+    entity: str | None,
+) -> None:
+    _root_path, roadmap = _load_roadmap(path)
+    write_dependencies_report(roadmap, sys.stdout, entity=entity)
+
+
+def report_dependencies(
+    entity: Annotated[
+        str | None,
+        typer.Argument(
+            help="Entity name (or project/slug); show predecessors and successors",
+        ),
+    ] = None,
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Print precedence dependencies (alias: ``deps``)."""
+    _write_dependencies_report(path, entity=entity)
+
+
+report_app.command("dependencies")(report_dependencies)
+report_app.command("deps")(report_dependencies)
 
 
 @app.command()

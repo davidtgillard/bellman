@@ -20,9 +20,10 @@ from bellman.model import (
 from bellman.naming import slugify, validate_kebab
 
 _DEPENDENCY_RE = re.compile(
-    r"^\s*after:\s*(?P<predecessor>\S+)\s*"
+    r"^\s*(?P<predecessor>\S+)\s+"
     r"\[(?P<relation>FF|FS|SF|SS),\s*(?P<hardness>Mandatory|Discretionary|Optional)\]\s*$"
 )
+_LEGACY_KEYWORD_RE = re.compile(r"^\s*(?:after|before)\s*:", re.IGNORECASE)
 _DURATION_RE = re.compile(r"^(\d+(?:\.\d+)?)([hdw])$", re.IGNORECASE)
 
 
@@ -114,11 +115,20 @@ def _parse_estimate_value(raw: Any, path: str, slug: str) -> Estimate:
 
 def _parse_dependency_item(raw: Any, path: str, slug: str) -> PrecedenceEdge:
     if isinstance(raw, str):
-        match = _DEPENDENCY_RE.match(raw.strip())
+        stripped = raw.strip()
+        if _LEGACY_KEYWORD_RE.match(stripped):
+            msg = (
+                f"invalid dependency syntax for work package {slug!r} "
+                f"in {path}: {raw!r}; use predecessor name only "
+                "(after:/before: are not allowed)"
+            )
+            raise ValueError(msg)
+        match = _DEPENDENCY_RE.match(stripped)
         if match is None:
             msg = (
                 f"invalid dependency syntax for work package {slug!r} "
-                f"in {path}: {raw!r}"
+                f"in {path}: {raw!r}; expected "
+                "'<predecessor> [FS, Mandatory]'"
             )
             raise ValueError(msg)
         return PrecedenceEdge(
@@ -130,9 +140,15 @@ def _parse_dependency_item(raw: Any, path: str, slug: str) -> PrecedenceEdge:
     if not isinstance(raw, dict):
         msg = f"invalid dependency for work package {slug!r} in {path}"
         raise ValueError(msg)
-    after = raw.get("after")
-    if not isinstance(after, str) or not after.strip():
-        msg = f"dependency missing after for work package {slug!r} in {path}"
+    if "after" in raw or "before" in raw:
+        msg = (
+            f"invalid dependency for work package {slug!r} in {path}: "
+            "use 'predecessor' (after:/before: are not allowed)"
+        )
+        raise ValueError(msg)
+    predecessor = raw.get("predecessor")
+    if not isinstance(predecessor, str) or not predecessor.strip():
+        msg = f"dependency missing predecessor for work package {slug!r} in {path}"
         raise ValueError(msg)
     relation_raw = raw.get("relation", "FS")
     hardness_raw = raw.get("hardness", "Mandatory")
@@ -143,7 +159,7 @@ def _parse_dependency_item(raw: Any, path: str, slug: str) -> PrecedenceEdge:
         msg = f"invalid dependency for work package {slug!r} in {path}: {exc}"
         raise ValueError(msg) from exc
     return PrecedenceEdge(
-        predecessor=after.strip(),
+        predecessor=predecessor.strip(),
         successor="",
         relation=relation,
         hardness=hardness,

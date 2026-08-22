@@ -37,7 +37,7 @@ def _add_scope_dependency(root: Path, *, dep: str, target: str) -> None:
     dep_path.write_text(
         dep_path.read_text(encoding="utf-8").replace(
             "## Dependencies\n\n",
-            f"## Dependencies\n\n- after: {target} [FS, Mandatory]\n",
+            f"## Dependencies\n\n- {target} [FS, Mandatory]\n",
         ),
         encoding="utf-8",
     )
@@ -47,7 +47,7 @@ def _remove_scope_dependencies(root: Path, *, dep: str) -> None:
     dep_path = layout.initiative_path(root, dep)
     dep_path.write_text(
         dep_path.read_text(encoding="utf-8").replace(
-            "## Dependencies\n\n- after: target-init [FS, Mandatory]\n",
+            "## Dependencies\n\n- target-init [FS, Mandatory]\n",
             "## Dependencies\n\n",
         ),
         encoding="utf-8",
@@ -181,7 +181,7 @@ work_packages:
   - title: Second
     description: TBD.
     dependencies:
-      - after: first
+      - predecessor: first
 """,
         encoding="utf-8",
     )

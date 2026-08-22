@@ -15,11 +15,21 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 
 
 def test_parse_dependencies() -> None:
-    body = "- after: foo [FS, Mandatory]\n"
+    body = "- foo [FS, Mandatory]\n"
     edges = parse_dependencies_section(body, successor="bar")
     assert len(edges) == 1
     assert edges[0].predecessor == "foo"
     assert edges[0].successor == "bar"
+
+
+def test_parse_dependencies_rejects_after() -> None:
+    with pytest.raises(ValueError, match="after:/before:"):
+        parse_dependencies_section("- after: foo [FS, Mandatory]\n", successor="bar")
+
+
+def test_parse_dependencies_rejects_before() -> None:
+    with pytest.raises(ValueError, match="after:/before:"):
+        parse_dependencies_section("- before: foo [FS, Mandatory]\n", successor="bar")
 
 
 def test_load_example_roadmap() -> None:

@@ -53,21 +53,23 @@ class RenamedEntity:
 _RENAMEABLE_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
 
 _SCOPE_DEPENDENCY_RE = re.compile(
-    r"^(\s*-\s+after:\s*)(?P<predecessor>\S+)(\s*"
+    r"^(\s*-\s+)(?P<predecessor>\S+)(\s*"
     r"\[(?:FF|FS|SF|SS),\s*(?:Mandatory|Discretionary|Optional)\]\s*)$"
 )
 
 _WP_DEPENDENCY_LINE_RE = re.compile(
-    r"^(\s*-\s+after:\s*)(?P<predecessor>\S+)(\s*"
+    r"^(\s*-\s+)(?P<predecessor>\S+)(\s*"
     r"\[(?:FF|FS|SF|SS),\s*(?:Mandatory|Discretionary|Optional)\]\s*)$"
 )
 
 _WP_DEPENDENCY_INLINE_RE = re.compile(
-    r"^(\s*after:\s*)(?P<predecessor>\S+)(\s*"
+    r"^(\s*)(?P<predecessor>\S+)(\s*"
     r"\[(?:FF|FS|SF|SS),\s*(?:Mandatory|Discretionary|Optional)\]\s*)$"
 )
 
-_WP_DEPENDENCY_DICT_AFTER_RE = re.compile(r"^(\s*after:\s*)(?P<predecessor>\S+)(\s*)$")
+_WP_DEPENDENCY_DICT_PREDECESSOR_RE = re.compile(
+    r"^(\s*predecessor:\s*)(?P<predecessor>\S+)(\s*)$"
+)
 
 
 def _entity_name_from_path(kind: str, path: Path) -> str:
@@ -469,7 +471,7 @@ def _rewrite_work_packages_line(
     for pattern in (
         _WP_DEPENDENCY_LINE_RE,
         _WP_DEPENDENCY_INLINE_RE,
-        _WP_DEPENDENCY_DICT_AFTER_RE,
+        _WP_DEPENDENCY_DICT_PREDECESSOR_RE,
     ):
         match = pattern.match(line)
         if match is None:

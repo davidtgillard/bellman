@@ -8,7 +8,7 @@ work_packages:
         description: PDF generation and delivery.
         estimate: [1w, 2w, 4w]
         dependencies:
-          - after: wp-invoicing
+          - predecessor: wp-invoicing
             relation: FS
             hardness: Mandatory
     dependencies: []

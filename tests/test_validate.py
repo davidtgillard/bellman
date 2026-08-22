@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from bellman.roadmap import load
+from bellman import layout
+from bellman.roadmap import load, load_for_validation
 from bellman.validate import validate_roadmap
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
@@ -132,3 +133,33 @@ def test_missing_estimate_errors(tmp_path: Path) -> None:
     assert len(result.errors) == 1
     assert "missing estimate" in result.errors[0].message
     assert result.warnings == ()
+
+
+def test_validate_rejects_legacy_after_in_markdown(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "follower")
+    path = layout.initiative_path(tmp_path, "follower")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "## Dependencies\n\n",
+            "## Dependencies\n\n- after: other [FS, Mandatory]\n",
+        ),
+        encoding="utf-8",
+    )
+    result = load_for_validation(tmp_path)
+    assert any("after:/before:" in e.message for e in result.errors)
+
+
+def test_validate_rejects_legacy_after_in_work_packages(tmp_path: Path) -> None:
+    _write_project_with_wp(
+        tmp_path,
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-foo\n"
+        "    description: Description.\n"
+        "    estimate: unknown\n"
+        "    dependencies:\n"
+        "      - after: wp-bar\n",
+    )
+    result = load_for_validation(tmp_path)
+    assert any("after:/before:" in e.message for e in result.errors)
