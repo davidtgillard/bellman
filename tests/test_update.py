@@ -500,3 +500,423 @@ def test_cli_update_replaces_running_executable(
         version="0.2.0",
         asset_id=200,
     )
+
+
+def test_download_asset_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bellman.update.download import download_asset
+
+    binary = tmp_path / "bellman"
+    binary.write_bytes(b"old")
+    monkeypatch.setattr(
+        "bellman.update.download.target_binary_path",
+        lambda: binary,
+    )
+
+    class _Resp:
+        def read(self, size: int = -1) -> bytes:
+            if not hasattr(self, "_done"):
+                self._done = True
+                return b"new-binary"
+            return b""
+
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "bellman.update.download.urllib.request.urlopen",
+        lambda *a, **k: _Resp(),
+    )
+    staging = download_asset(_asset(1, "0.2.0"), settings=_settings())
+    assert staging.is_file()
+    assert staging.read_bytes() == b"new-binary"
+    staging.unlink(missing_ok=True)
+
+
+def test_download_asset_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import urllib.error
+
+    from bellman.update.download import download_asset
+
+    binary = tmp_path / "bellman"
+    binary.write_bytes(b"old")
+    monkeypatch.setattr(
+        "bellman.update.download.target_binary_path",
+        lambda: binary,
+    )
+
+    def _boom(*a, **k):
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr("bellman.update.download.urllib.request.urlopen", _boom)
+    with pytest.raises(OSError, match="download failed"):
+        download_asset(_asset(1, "0.2.0"), settings=_settings())
+
+
+def test_apply_binary_update(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from bellman.update.install import apply_binary_update
+
+    binary = tmp_path / "bellman"
+    binary.write_bytes(b"old")
+    staging = tmp_path / "staging"
+    staging.write_bytes(b"new")
+    state_file = tmp_path / "bellman-state.json"
+    monkeypatch.setattr(
+        "bellman.update.install.target_binary_path",
+        lambda: binary,
+    )
+    monkeypatch.setattr("bellman.update.state.state_write_path", lambda: state_file)
+    monkeypatch.setattr(
+        "bellman.update.state.state_read_path",
+        lambda: state_file if state_file.is_file() else None,
+    )
+    apply_binary_update(staging, version="0.2.0", asset_id=99)
+    assert binary.read_bytes() == b"new"
+    loaded = BellmanState.load()
+    assert loaded.installed_version == "0.2.0"
+    assert loaded.installed_asset_id == 99
+
+
+def test_verify_update_permissions_not_writable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "bellman"
+    binary.write_bytes(b"fake")
+    monkeypatch.setattr(
+        "bellman.update.install.target_binary_path",
+        lambda: binary,
+    )
+    monkeypatch.setattr("bellman.update.install.os.access", lambda *a, **k: False)
+    with pytest.raises(OSError, match="no write permission"):
+        verify_update_permissions()
+
+
+def test_verify_update_permissions_mkstemp_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    binary = tmp_path / "bellman"
+    binary.write_bytes(b"fake")
+    monkeypatch.setattr(
+        "bellman.update.install.target_binary_path",
+        lambda: binary,
+    )
+    monkeypatch.setattr("bellman.update.install.os.access", lambda *a, **k: True)
+
+    def _fail(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("bellman.update.install.tempfile.mkstemp", _fail)
+    with pytest.raises(OSError, match="cannot write"):
+        verify_update_permissions()
+
+
+def test_running_executable_proc_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_exe = tmp_path / "proc-exe"
+    fake_exe.write_bytes(b"x")
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setattr(sys, "argv", ["bellman"])
+    monkeypatch.setattr("bellman.update.paths.shutil.which", lambda _: None)
+
+    class FakeProc:
+        def is_symlink(self) -> bool:
+            return True
+
+        def resolve(self) -> Path:
+            return fake_exe.resolve()
+
+    real_path = Path
+
+    def path_factory(*args: object, **kwargs: object) -> object:
+        if args == ("/proc/self/exe",):
+            return FakeProc()
+        return real_path(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("bellman.update.paths.Path", path_factory)
+    assert running_executable() == fake_exe.resolve()
+
+
+def test_state_read_path_home_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bellman.update.paths import state_read_path
+
+    home = tmp_path / "home-bellman"
+    home.mkdir()
+    state = home / "bellman-state.json"
+    state.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        "bellman.update.paths.local_bellman_dir",
+        lambda: tmp_path / "missing-local",
+    )
+    monkeypatch.setattr("bellman.update.paths.home_bellman_dir", lambda: home)
+    assert state_read_path() == state
+
+
+def test_state_write_path_falls_back_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bellman.update.paths import state_write_path
+
+    home = tmp_path / "home-bellman"
+    monkeypatch.setattr(
+        "bellman.update.paths.local_bellman_dir",
+        lambda: tmp_path / "no-write",
+    )
+    monkeypatch.setattr("bellman.update.paths.home_bellman_dir", lambda: home)
+
+    def _mkdir_side_effect(self, *a, **k):
+        if "no-write" in str(self):
+            raise OSError("denied")
+        return real_mkdir(self, *a, **k)
+
+    real_mkdir = Path.mkdir
+    monkeypatch.setattr(Path, "mkdir", _mkdir_side_effect)
+    path = state_write_path()
+    assert path == home / "bellman-state.json"
+
+
+def test_parse_asset_skips_invalid() -> None:
+    from bellman.update.github import _parse_asset
+
+    assert _parse_asset({"name": "x.sha256"}) is None
+    assert _parse_asset({"name": "ok", "id": "bad"}) is None
+    assert (
+        _parse_asset(
+            {
+                "name": "ok",
+                "id": 1,
+                "url": "u",
+                "browser_download_url": None,
+                "updated_at": "t",
+            }
+        )
+        is None
+    )
+
+
+def test_parse_version_unknown_suffix() -> None:
+    assert parse_version_from_asset_name("bellman-0.1.0-unknown") is None
+
+
+def test_pick_platform_asset_none() -> None:
+    release = GitHubRelease(tag_name="dev", assets=(_asset(1, "0.1.0"),))
+    assert pick_platform_asset(release, _settings(MACOS_PATTERN), "0.1.0") is None
+
+
+def test_latest_platform_asset_skips_bad_semver() -> None:
+    release = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            ReleaseAsset(
+                id=1,
+                name="bellman-not-a-version-linux-x86_64",
+                url="u",
+                browser_download_url="b",
+                updated_at="t",
+            ),
+            _asset(2, "0.1.0"),
+        ),
+    )
+    asset = latest_platform_asset(release, _settings())
+    assert asset is not None
+    assert asset.id == 2
+
+
+def test_latest_platform_asset_empty() -> None:
+    release = GitHubRelease(tag_name="dev", assets=())
+    assert latest_platform_asset(release, _settings()) is None
+
+
+def test_fetch_release_parses_assets(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    from bellman.update.github import fetch_release
+
+    payload = {
+        "tag_name": "dev",
+        "assets": [
+            {
+                "id": 1,
+                "name": "bellman-0.1.0-linux-x86_64",
+                "url": "https://api.example/1",
+                "browser_download_url": "https://dl.example/1",
+                "updated_at": "2026-01-01T00:00:00Z",
+                "digest": "sha256:abc",
+            },
+            {"name": "skip.sha256"},
+            "not-a-dict",
+        ],
+    }
+
+    class _Resp:
+        def read(self) -> bytes:
+            return json.dumps(payload).encode()
+
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *a: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "bellman.update.github.urllib.request.urlopen",
+        lambda *a, **k: _Resp(),
+    )
+    release = fetch_release(_settings())
+    assert release.tag_name == "dev"
+    assert len(release.assets) == 1
+    assert release.assets[0].digest == "sha256:abc"
+
+
+def test_fetch_release_url_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    from bellman.update.github import fetch_release
+
+    def _boom(*a, **k):
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr("bellman.update.github.urllib.request.urlopen", _boom)
+    with pytest.raises(OSError, match="failed to fetch release"):
+        fetch_release(_settings())
+
+
+def test_is_update_available_older_remote() -> None:
+    installed = semver.Version.parse("0.3.0")
+    latest = semver.Version.parse("0.2.0")
+    assert not _is_update_available(installed, 100, latest, _asset(200, "0.2.0"))
+
+
+def test_is_update_available_none_asset_id() -> None:
+    installed = semver.Version.parse("0.1.0")
+    latest = semver.Version.parse("0.1.0")
+    assert _is_update_available(installed, None, latest, _asset(200, "0.1.0"))
+
+
+@patch("bellman.update.check.fetch_release")
+def test_check_for_update_fetch_failure(mock_fetch: MagicMock) -> None:
+    mock_fetch.side_effect = OSError("offline")
+    state = BellmanState()
+    result = check_for_update(settings=_settings(), state=state, record_check=False)
+    assert result.kind == "check_failed"
+    assert "offline" in result.message
+
+
+@patch("bellman.update.check.fetch_release")
+def test_check_for_update_no_asset(mock_fetch: MagicMock) -> None:
+    mock_fetch.return_value = GitHubRelease(tag_name="dev", assets=())
+    result = check_for_update(
+        settings=_settings(),
+        state=BellmanState(),
+        record_check=False,
+    )
+    assert result.kind == "check_failed"
+    assert "no matching release asset" in result.message
+
+
+@patch("bellman.update.check.fetch_release")
+def test_cli_update_check_failed(mock_fetch: MagicMock) -> None:
+    mock_fetch.side_effect = OSError("network down")
+    result = runner.invoke(app, ["update", "--check"])
+    assert result.exit_code == 1
+    assert "network down" in result.output
+
+
+@patch("bellman.update.check.apply_binary_update")
+@patch("bellman.update.check.download_asset")
+@patch("bellman.update.check.verify_update_permissions")
+@patch("bellman.update.check.fetch_release")
+def test_cli_update_success_message_includes_digest(
+    mock_fetch: MagicMock,
+    mock_verify: MagicMock,
+    mock_download: MagicMock,
+    mock_apply: MagicMock,
+    tmp_path: Path,
+) -> None:
+    binary = tmp_path / "bellman"
+    binary.write_bytes(b"old")
+    staging = tmp_path / "staging"
+    staging.write_bytes(b"new")
+    mock_fetch.return_value = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            _asset(
+                200,
+                "0.2.0",
+                digest="sha256:abc",
+                updated_at="2026-08-22T12:00:00Z",
+            ),
+        ),
+    )
+    mock_verify.return_value = binary
+    mock_download.return_value = staging
+    with (
+        patch("bellman.update.check.get_version", return_value=V0_1_0),
+        patch("bellman.update.check.is_frozen", return_value=True),
+    ):
+        result = runner.invoke(app, ["update"])
+    assert result.exit_code == 0
+    assert "Updated bellman to 0.2.0" in result.stdout
+    assert "sha256:abc" in result.stdout
+
+
+@patch("bellman.update.check.fetch_release")
+def test_check_for_update_unparseable_version(mock_fetch: MagicMock) -> None:
+    mock_fetch.return_value = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            ReleaseAsset(
+                id=1,
+                name="bellman-0.1.0-linux-x86_64",
+                url="u",
+                browser_download_url="b",
+                updated_at="t",
+            ),
+        ),
+    )
+    with patch(
+        "bellman.update.check.parse_version_from_asset_name",
+        return_value=None,
+    ):
+        result = check_for_update(
+            settings=_settings(),
+            state=BellmanState(),
+            record_check=False,
+        )
+    assert result.kind == "check_failed"
+    assert "could not parse version" in result.message
+
+
+@patch("bellman.update.check.fetch_release")
+def test_check_for_update_invalid_semver(mock_fetch: MagicMock) -> None:
+    mock_fetch.return_value = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            ReleaseAsset(
+                id=1,
+                name="bellman-0.1.0-linux-x86_64",
+                url="u",
+                browser_download_url="b",
+                updated_at="t",
+            ),
+        ),
+    )
+    with patch(
+        "bellman.update.check.parse_version_from_asset_name",
+        return_value="not-a-semver",
+    ):
+        result = check_for_update(
+            settings=_settings(),
+            state=BellmanState(),
+            record_check=False,
+        )
+    assert result.kind == "check_failed"
+    assert "invalid semver" in result.message

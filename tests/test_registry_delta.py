@@ -165,3 +165,47 @@ class _FakeRepo:
 
     def output_graph(self, *, include_nested: bool = False) -> Ok[Graph]:
         return Ok(self._graph)
+
+
+def test_registry_delta_properties() -> None:
+    from bellman.graph.delta import RegistryDelta
+
+    empty = RegistryDelta((), (), (), ())
+    assert not empty.has_differences
+    assert empty.count == 0
+    delta = RegistryDelta(("n",), ("e",), ("ml",), ("el",), needs_id_migration=True)
+    assert delta.has_differences
+    assert delta.count == 4
+
+
+def test_registry_delta_error_format() -> None:
+    from bellman.graph.delta import RegistryDeltaError
+
+    assert RegistryDeltaError("x").format() == "x"
+
+
+def test_compute_registry_delta_libfits_unavailable(tmp_path: Path) -> None:
+    from pyfits.result import Err
+
+    from bellman.graph.delta import RegistryDeltaError
+
+    layout.ensure_roadmap_dirs(tmp_path)
+    roadmap = load(tmp_path)
+    with patch("bellman.graph.delta.libfits_available", return_value=False):
+        result = compute_registry_delta(tmp_path, roadmap)
+    assert isinstance(result, Err)
+    assert isinstance(result.err_value, RegistryDeltaError)
+
+
+def test_compute_registry_delta_no_fits_dir(tmp_path: Path) -> None:
+    from pyfits.result import Err
+
+    from bellman.graph.delta import RegistryDeltaError
+
+    layout.ensure_roadmap_dirs(tmp_path)
+    roadmap = load(tmp_path)
+    with patch("bellman.graph.delta.libfits_available", return_value=True):
+        result = compute_registry_delta(tmp_path, roadmap)
+    assert isinstance(result, Err)
+    assert isinstance(result.err_value, RegistryDeltaError)
+    assert "not initialized" in result.err_value.message

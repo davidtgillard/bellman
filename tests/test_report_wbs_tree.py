@@ -184,3 +184,44 @@ def test_report_wbs_csv_still_works() -> None:
     result = runner.invoke(app, ["report", "wbs", str(EXAMPLES)])
     assert result.exit_code == 0
     assert "work package,numbered section" in result.stdout
+
+
+def test_project_total_empty_packages() -> None:
+    from dataclasses import replace
+
+    project = load(EXAMPLES).project_by_name("billing-redesign")
+    assert project is not None
+    empty = replace(project, work_packages=())
+    total = project_total_pert(empty)
+    assert total.display == "?"
+
+
+def test_write_wbs_tree_all_projects() -> None:
+    roadmap = load(EXAMPLES)
+    buffer = StringIO()
+    write_wbs_tree(roadmap, buffer)
+    assert "project: billing-redesign" in buffer.getvalue()
+
+
+def test_sum_rollups_mixed_units_at_project() -> None:
+    from dataclasses import replace
+
+    from bellman.model import ThreePointEstimate, WorkPackage
+
+    project = load(EXAMPLES).project_by_name("billing-redesign")
+    assert project is not None
+    wp_d = WorkPackage(
+        slug="d",
+        title="d",
+        description="d",
+        estimate=ThreePointEstimate(1.0, 1.0, 1.0, "d"),
+    )
+    wp_w = WorkPackage(
+        slug="w",
+        title="w",
+        description="w",
+        estimate=ThreePointEstimate(1.0, 1.0, 1.0, "w"),
+    )
+    mixed = replace(project, work_packages=(wp_d, wp_w))
+    with pytest.raises(ValueError, match="mixed duration units"):
+        project_total_pert(mixed)

@@ -383,7 +383,12 @@ def prune_deleted_entity(
         if isinstance(boot, Err):
             return boot
 
-        for logical_name in node_names:
+        # Deepest paths first so nested work packages are removed before projects.
+        for logical_name in sorted(
+            node_names,
+            key=lambda name: name.count("/"),
+            reverse=True,
+        ):
             guid = index.guid_for_name(logical_name)
             if guid is None:
                 continue

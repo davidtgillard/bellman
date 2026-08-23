@@ -99,3 +99,202 @@ def test_prune_deleted_initiative_with_scope_dependency(tmp_path: Path) -> None:
     assert isinstance(open_result, Ok)
     with open_result.ok_value as repo:
         assert isinstance(repo.validate(), Ok)
+
+
+def test_reconcile_no_registry(tmp_path: Path) -> None:
+    result = reconcile_link_artifacts(tmp_path)
+    assert isinstance(result, Ok)
+    assert result.ok_value == 0
+
+
+def test_reconcile_no_links_file(tmp_path: Path) -> None:
+    fits = tmp_path / ".fits"
+    fits.mkdir()
+    (fits / "registry.json").write_text("{}", encoding="utf-8")
+    result = reconcile_link_artifacts(tmp_path)
+    assert isinstance(result, Ok)
+    assert result.ok_value == 0
+
+
+def test_reconcile_invalid_links_doc(tmp_path: Path) -> None:
+    from pyfits.result import Err
+
+    fits = tmp_path / ".fits"
+    fits.mkdir()
+    (fits / "registry.json").write_text("{}", encoding="utf-8")
+    links = tmp_path / "links"
+    links.mkdir()
+    (links / "links.jsonc").write_text("[1, 2, 3]\n", encoding="utf-8")
+    result = reconcile_link_artifacts(tmp_path)
+    assert isinstance(result, Err)
+
+
+def test_reconcile_missing_links_array(tmp_path: Path) -> None:
+    fits = tmp_path / ".fits"
+    fits.mkdir()
+    (fits / "registry.json").write_text(
+        json.dumps({"instances": []}),
+        encoding="utf-8",
+    )
+    links = tmp_path / "links"
+    links.mkdir()
+    (links / "links.jsonc").write_text(
+        json.dumps({"kind": "fits-links-v1", "version": 1}),
+        encoding="utf-8",
+    )
+    # links key missing -> treated as [] then nothing to remove
+    result = reconcile_link_artifacts(tmp_path)
+    assert isinstance(result, Ok)
+
+
+def test_reconcile_drops_subgraph_links(tmp_path: Path) -> None:
+    fits = tmp_path / ".fits"
+    fits.mkdir()
+    (fits / "registry.json").write_text(
+        json.dumps(
+            {
+                "instances": [
+                    {
+                        "name": "a",
+                        "kind": "node",
+                        "type": "goal",
+                        "guid": _NODE_GUID,
+                        "scope": "root",
+                    },
+                    {
+                        "name": "lnk",
+                        "kind": "link",
+                        "type": "parent_of",
+                        "guid": _LINK_GUID,
+                        "scope": "root",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    links = tmp_path / "links"
+    links.mkdir()
+    (links / "links.jsonc").write_text(
+        json.dumps(
+            {
+                "kind": "fits-links-v1",
+                "version": 1,
+                "links": [
+                    {
+                        "guid": _LINK_GUID,
+                        "link_type": "parent_of",
+                        "in": _NODE_GUID,
+                        "out": _NODE_GUID,
+                        "labels": None,
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sub = tmp_path / "nodes" / "goal" / "subgraph.jsonc"
+    sub.parent.mkdir(parents=True)
+    sub.write_text(
+        json.dumps({"links": [{"guid": _LINK_GUID}, {"guid": "other"}]}),
+        encoding="utf-8",
+    )
+    result = reconcile_link_artifacts(
+        tmp_path,
+        drop_link_guids={_LINK_GUID},
+    )
+    assert isinstance(result, Ok)
+    assert result.ok_value >= 1
+    kept = json.loads(sub.read_text(encoding="utf-8"))
+    assert kept["links"] == [{"guid": "other"}]
+
+
+def test_reconcile_drop_touching_nodes(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    from bellman.graph.history import GraphHistory, InstanceRecord
+    from bellman.graph.identity import InstanceIndex
+
+    fits = tmp_path / ".fits"
+    fits.mkdir()
+    (fits / "registry.json").write_text(
+        json.dumps(
+            {
+                "kind": "fits-registry",
+                "instances": [
+                    {
+                        "name": "goal-a",
+                        "kind": "node",
+                        "type": "goal",
+                        "guid": _NODE_GUID,
+                        "scope": "root",
+                    },
+                    {
+                        "name": "goal-b",
+                        "kind": "node",
+                        "type": "goal",
+                        "guid": _MISSING_GUID,
+                        "scope": "root",
+                    },
+                    {
+                        "name": "lnk",
+                        "kind": "link",
+                        "type": "parent_of",
+                        "guid": _LINK_GUID,
+                        "scope": "root",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    links = tmp_path / "links"
+    links.mkdir()
+    (links / "links.jsonc").write_text(
+        json.dumps(
+            {
+                "kind": "fits-links-v1",
+                "version": 1,
+                "links": [
+                    {
+                        "guid": _LINK_GUID,
+                        "link_type": "parent_of",
+                        "in": _NODE_GUID,
+                        "out": _MISSING_GUID,
+                        "labels": None,
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    history = GraphHistory(
+        instances=(
+            InstanceRecord(
+                guid=_NODE_GUID,
+                instance_name="goal-a",
+                type_name="goal",
+                kind="node",
+            ),
+            InstanceRecord(
+                guid=_MISSING_GUID,
+                instance_name="goal-b",
+                type_name="goal",
+                kind="node",
+            ),
+        )
+    )
+    with patch(
+        "bellman.graph.links_file.InstanceIndex.load",
+        return_value=Ok(InstanceIndex.from_history(history)),
+    ):
+        result = reconcile_link_artifacts(
+            tmp_path,
+            drop_touching_nodes={"goal-a"},
+        )
+    assert isinstance(result, Ok)
+    assert result.ok_value >= 1

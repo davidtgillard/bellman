@@ -9,8 +9,9 @@ from pyfits.errors import FitsError
 from pyfits.result import Err, Ok
 from typer.testing import CliRunner
 
+from bellman import layout
 from bellman.cli import app
-from bellman.graph.delta import RegistryDelta
+from bellman.graph.delta import RegistryDelta, RegistryDeltaError
 
 runner = CliRunner()
 
@@ -43,8 +44,6 @@ def test_validate_reports_all_validation_errors(tmp_path: Path) -> None:
 
 
 def test_validate_does_not_sync(tmp_path: Path) -> None:
-    from bellman import layout
-
     layout.ensure_roadmap_dirs(tmp_path)
     _write_fits_marker(tmp_path)
     with (
@@ -81,6 +80,116 @@ def test_validate_reports_registry_deltas(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "registry delta: missing node goal manual-goal" in result.output
     assert "bellman sync" in result.output
+
+
+def test_validate_registry_matches(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    delta = RegistryDelta(
+        missing_nodes=(),
+        extra_nodes=(),
+        missing_links=(),
+        extra_links=(),
+    )
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch("bellman.cli.compute_registry_delta", return_value=Ok(delta)),
+    ):
+        result = runner.invoke(app, ["validate", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "Registry matches git." in result.output
+
+
+def test_validate_emits_all_delta_message_kinds(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    delta = RegistryDelta(
+        missing_nodes=("goal missing-g",),
+        extra_nodes=("goal extra-g",),
+        missing_links=("parent_of a -> b",),
+        extra_links=("depends_on x -> y",),
+        needs_id_migration=True,
+    )
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch("bellman.cli.compute_registry_delta", return_value=Ok(delta)),
+    ):
+        result = runner.invoke(app, ["validate", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "missing node goal missing-g" in result.output
+    assert "extra node goal extra-g" in result.output
+    assert "missing link parent_of a -> b" in result.output
+    assert "extra link depends_on x -> y" in result.output
+    assert "legacy flat node IDs" in result.output
+
+
+def test_validate_compute_registry_delta_err(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch(
+            "bellman.cli.compute_registry_delta",
+            return_value=Err(RegistryDeltaError("delta boom")),
+        ),
+    ):
+        result = runner.invoke(app, ["validate", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "Registry delta check failed: delta boom" in result.output
+
+
+def test_validate_compute_registry_delta_fits_err(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch(
+            "bellman.cli.compute_registry_delta",
+            return_value=Err(FitsError("fits boom", code="test")),
+        ),
+    ):
+        result = runner.invoke(app, ["validate", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "Registry delta check failed" in result.output
+
+
+def test_validate_warnings_only_path(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    _write_fits_marker(tmp_path)
+    project_dir = tmp_path / "projects" / "demo"
+    project_dir.mkdir(parents=True)
+    (project_dir / "demo.md").write_text(
+        "# Demo\n\n"
+        "## Introduction\n\nTBD.\n\n"
+        "## Motivation\n\nTBD.\n\n"
+        "## Detailed Description\n\nTBD.\n\n"
+        "### Criteria for Success\n\nShip it.\n\n"
+        "## Dependencies\n\n",
+        encoding="utf-8",
+    )
+    (project_dir / "work-packages.yaml").write_text(
+        "version: 1\n\n"
+        "work_packages:\n"
+        "  - title: wp-foo\n"
+        "    description: Description.\n"
+        "    estimate: unknown\n",
+        encoding="utf-8",
+    )
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch(
+            "bellman.cli.compute_registry_delta",
+            return_value=Ok(
+                RegistryDelta(
+                    missing_nodes=(),
+                    extra_nodes=(),
+                    missing_links=(),
+                    extra_links=(),
+                )
+            ),
+        ),
+    ):
+        result = runner.invoke(app, ["validate", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "warning:" in result.output
+    assert "passed with" in result.output
+    assert "warning" in result.output
 
 
 def test_sync_requires_markdown_validation_pass(tmp_path: Path) -> None:

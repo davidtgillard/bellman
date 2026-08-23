@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from pyfits.result import Err, Ok
 
 from bellman import layout
+from bellman.graph.desired import entity_node_id
+from bellman.graph.identity import InstanceIndex
 from bellman.graph.sync import (
     init_pyfits_repo,
     libfits_available,
@@ -139,3 +142,56 @@ def test_cli_create_initiative_with_unrelated_parse_error(tmp_path: Path) -> Non
     assert "kri-image-tools" in result.output
     assert "Graph sync passed." in result.output
     assert (tmp_path / "initiatives" / "kri-image-tools.md").is_file()
+
+
+def _has_live_logical(root: Path, logical_name: str) -> bool:
+    result = InstanceIndex.load(root)
+    if isinstance(result, Err):
+        return False
+    return logical_name in result.ok_value.live_node_names()
+
+
+@pytest.mark.integration
+def test_prune_deleted_project_with_work_packages(tmp_path: Path) -> None:
+    if not libfits_available():
+        pytest.skip("libfits not available")
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_project(tmp_path, "demo-project")
+    wp_path = layout.work_packages_path(tmp_path, "demo-project")
+    wp_path.write_text(
+        """version: 1
+
+work_packages:
+  - title: First
+    description: TBD.
+  - title: Second
+    description: TBD.
+""",
+        encoding="utf-8",
+    )
+    _bootstrap_pyfits(tmp_path)
+    assert isinstance(sync_roadmap(tmp_path), Ok)
+    assert _has_live_logical(tmp_path, "project/demo-project/first")
+    assert _has_live_logical(tmp_path, "project/demo-project/second")
+
+    layout.delete_entity(tmp_path, "demo-project")
+    result = prune_deleted_entity(tmp_path, "project", "demo-project")
+    assert isinstance(result, Ok)
+    assert not _has_live_logical(tmp_path, entity_node_id("project", "demo-project"))
+    assert not _has_live_logical(tmp_path, "project/demo-project/first")
+    assert not _has_live_logical(tmp_path, "project/demo-project/second")
+
+
+def test_prune_deleted_entity_unknown_kind(tmp_path: Path) -> None:
+    (tmp_path / ".fits").mkdir()
+    with patch("bellman.graph.sync.libfits_available", return_value=True):
+        result = prune_deleted_entity(tmp_path, "bogus", "x")
+    assert isinstance(result, Err)
+    assert result.err_value.code == "invalid_entity"
+
+
+def test_prune_deleted_entity_libfits_unavailable(tmp_path: Path) -> None:
+    with patch("bellman.graph.sync.libfits_available", return_value=False):
+        result = prune_deleted_entity(tmp_path, "goal", "x")
+    assert isinstance(result, Err)
+    assert result.err_value.code == "lib_not_found"

@@ -65,12 +65,24 @@ markers = [
 ]
 addopts = [
     "--cov=bellman",
-    "--cov-report=term-missing",
+    "--cov-report=term-missing:skip-covered",
 ]
 
 [tool.coverage.run]
 branch = true
 source = ["bellman"]
+omit = [
+    "*/bellman/__main__.py",
+    "*/bellman/_build_version.py",
+]
+
+[tool.coverage.report]
+fail_under = 95
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.mypy]
 python_version = "3.12"

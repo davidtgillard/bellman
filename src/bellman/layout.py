@@ -337,13 +337,13 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
                 msg = f"no entity at {ref!r} in roadmap at {root}"
                 raise BellmanLayoutError(msg)
             return "project", path
-        if len(parts) == 2 and parts[1].endswith(".md"):
+        if len(parts) == 3 and parts[2].endswith(".md"):
             path = root_resolved / rel
             if not path.is_file():
                 msg = f"no entity at {ref!r} in roadmap at {root}"
                 raise BellmanLayoutError(msg)
-            project_name = parts[1][:-3]
-            if parts[1] != f"{project_name}.md":
+            project_name = parts[1]
+            if parts[2] != f"{project_name}.md":
                 msg = (
                     f"invalid project path {ref!r}; "
                     "expected projects/{name}/{name}.md"
