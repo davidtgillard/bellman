@@ -33,6 +33,8 @@ class ReleaseAsset:
         url: API URL for authenticated download.
         browser_download_url: Public browser download URL.
         updated_at: ISO-8601 last-updated timestamp.
+        digest: Content digest from GitHub when present (for example
+            ``sha256:...``).
     """
 
     id: int
@@ -40,6 +42,7 @@ class ReleaseAsset:
     url: str
     browser_download_url: str
     updated_at: str
+    digest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,12 +70,15 @@ def _parse_asset(raw: dict[str, object]) -> ReleaseAsset | None:
         return None
     if not isinstance(browser, str) or not isinstance(updated, str):
         return None
+    digest_raw = raw.get("digest")
+    digest = digest_raw if isinstance(digest_raw, str) and digest_raw else None
     return ReleaseAsset(
         id=asset_id,
         name=name,
         url=url,
         browser_download_url=browser,
         updated_at=updated,
+        digest=digest,
     )
 
 

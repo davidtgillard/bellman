@@ -53,7 +53,12 @@ def _settings(asset_pattern: str = LINUX_PATTERN) -> UpdateSettings:
 
 
 def _asset(
-    asset_id: int, version: str, *, pattern: str = LINUX_PATTERN
+    asset_id: int,
+    version: str,
+    *,
+    pattern: str = LINUX_PATTERN,
+    digest: str | None = None,
+    updated_at: str = "2026-01-01T00:00:00Z",
 ) -> ReleaseAsset:
     name = pattern.format(version=version)
     return ReleaseAsset(
@@ -61,7 +66,8 @@ def _asset(
         name=name,
         url=f"https://api.github.com/assets/{asset_id}",
         browser_download_url=f"https://example.com/{name}",
-        updated_at="2026-01-01T00:00:00Z",
+        updated_at=updated_at,
+        digest=digest,
     )
 
 
@@ -158,7 +164,14 @@ def test_default_asset_pattern_macos_arm(
 def test_check_for_update_available(mock_fetch: MagicMock) -> None:
     mock_fetch.return_value = GitHubRelease(
         tag_name="dev",
-        assets=(_asset(200, "0.2.0"),),
+        assets=(
+            _asset(
+                200,
+                "0.2.0",
+                digest="sha256:abc123",
+                updated_at="2026-08-22T13:42:08Z",
+            ),
+        ),
     )
     state = BellmanState(installed_version="0.1.0", installed_asset_id=100)
     settings = _settings()
@@ -166,6 +179,47 @@ def test_check_for_update_available(mock_fetch: MagicMock) -> None:
         result = check_for_update(settings=settings, state=state, record_check=False)
     assert result.kind == "update_available"
     assert result.latest_version == "0.2.0"
+    assert "sha256:abc123" in result.message
+    assert "updated 2026-08-22T13:42:08Z" in result.message
+    assert "bellman-0.2.0-linux-x86_64" in result.message
+
+
+@patch("bellman.update.check.fetch_release")
+def test_cli_update_check_reports_digest_and_timestamp(mock_fetch: MagicMock) -> None:
+    mock_fetch.return_value = GitHubRelease(
+        tag_name="dev",
+        assets=(
+            _asset(
+                200,
+                "0.2.0",
+                digest="sha256:deadbeef",
+                updated_at="2026-08-22T12:00:00Z",
+            ),
+        ),
+    )
+    with patch("bellman.update.check.get_version", return_value=V0_1_0):
+        result = runner.invoke(app, ["update", "--check"])
+    assert result.exit_code == 1
+    assert "sha256:deadbeef" in result.stdout
+    assert "updated 2026-08-22T12:00:00Z" in result.stdout
+
+
+def test_parse_asset_includes_digest() -> None:
+    from bellman.update.github import _parse_asset
+
+    parsed = _parse_asset(
+        {
+            "id": 1,
+            "name": "bellman-0.1.0-linux-x86_64",
+            "url": "https://api.github.com/assets/1",
+            "browser_download_url": "https://example.com/a",
+            "updated_at": "2026-08-22T13:42:08Z",
+            "digest": "sha256:abc",
+        }
+    )
+    assert parsed is not None
+    assert parsed.digest == "sha256:abc"
+    assert parsed.updated_at == "2026-08-22T13:42:08Z"
 
 
 @patch("bellman.update.check.fetch_release")

@@ -48,6 +48,16 @@ def _is_update_available(
     return latest_asset.id != installed_asset_id
 
 
+def _format_update_available_message(version_str: str, asset: ReleaseAsset) -> str:
+    """Format the one-line update-available notice with digest and timestamp."""
+    parts = [f"asset {asset.name}"]
+    if asset.digest:
+        parts.append(asset.digest)
+    if asset.updated_at:
+        parts.append(f"updated {asset.updated_at}")
+    return f"update available: {version_str} ({', '.join(parts)})"
+
+
 def check_for_update(
     *,
     settings: UpdateSettings | None = None,
@@ -103,7 +113,7 @@ def check_for_update(
     if _is_update_available(installed, installed_asset_id, latest, asset):
         return CheckResult(
             kind="update_available",
-            message=f"update available: {version_str} (asset {asset.name})",
+            message=_format_update_available_message(version_str, asset),
             latest_version=version_str,
             asset=asset,
         )
@@ -164,4 +174,9 @@ def run_update_command(*, check_only: bool) -> None:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
-    typer.echo(f"Updated bellman to {result.latest_version}")
+    updated_parts = [result.latest_version]
+    if result.asset.digest:
+        updated_parts.append(result.asset.digest)
+    if result.asset.updated_at:
+        updated_parts.append(f"updated {result.asset.updated_at}")
+    typer.echo(f"Updated bellman to {', '.join(updated_parts)}")
