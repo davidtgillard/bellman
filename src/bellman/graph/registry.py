@@ -12,8 +12,17 @@ from bellman.model import Hardness, RelationType
 KIND_TYPE = "kind"
 """Node type for type-root containers (``goal``, ``project``, …)."""
 
-KIND_ROOT_NAMES = ("goal", "initiative", "project", "milestone")
-"""Local names of kind-root instances; first segment of entity logical paths."""
+WORK_SCOPE_KIND_ROOT = "work_scope"
+"""Kind-root instance that hosts both initiative and project nodes."""
+
+KIND_ROOT_NAMES = ("goal", "initiative", "project", "milestone", WORK_SCOPE_KIND_ROOT)
+"""Local names of kind-root instances.
+
+``goal`` and ``milestone`` host those entity types. ``work_scope`` hosts both
+``initiative`` and ``project`` so scope-precedence links can connect them as
+nested siblings (libfits nested links require a shared parent). ``initiative``
+and ``project`` kind-roots remain so kind names stay stable.
+"""
 
 
 def precedes_link_types() -> list[str]:
@@ -84,8 +93,9 @@ def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
         for hard in Hardness:
             lt = f"precedes_{rel.value}_{hardness_suffix(hard)}"
             steps.append(repo.register_link_type(lt, "work_package", "work_package"))
-            # Nested under kind roots; project/project registration covers same-kind
-            # scope deps (initiative-initiative uses the same nested link type name).
+            # Nested under the shared work_scope kind-root. Registering project→project
+            # covers initiative/project mixes: nested create does not re-check types,
+            # and both concrete types are siblings under that parent.
             scope_lt = f"{lt}_scope"
             steps.append(repo.register_link_type(scope_lt, "project", "project"))
 
@@ -97,7 +107,7 @@ def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
 
 
 def ensure_kind_roots(repo: Repo) -> Result[None, FitsError]:
-    """Create the four kind-root instances when missing.
+    """Create kind-root instances when missing.
 
     Args:
         repo: Open pyfits repository session.

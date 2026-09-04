@@ -164,6 +164,9 @@ def test_desired_nodes_skips_archived_when_project_exists() -> None:
     nodes = desired_nodes(roadmap)
     assert DesiredNode("project", "project/promoted") in nodes
     assert DesiredNode("initiative", "initiative/promoted") not in nodes
+    scopes = roadmap.all_work_scopes()
+    assert [scope.name for scope in scopes] == ["promoted"]
+    assert isinstance(scopes[0], Project)
 
 
 def test_desired_precedence_edges() -> None:

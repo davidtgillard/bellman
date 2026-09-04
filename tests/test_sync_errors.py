@@ -14,6 +14,7 @@ from bellman.graph.history import BellmanHistoryError, GraphHistory, InstanceRec
 from bellman.graph.identity import InstanceIndex
 from bellman.graph.sync import (
     _bootstrap_session,
+    _container_logical_name,
     _ensure_link,
     _ensure_node,
     _history_to_fits_error,
@@ -46,6 +47,13 @@ def test_parent_logical_path() -> None:
     assert _parent_logical_path("goal") is None
     assert _parent_logical_path("project/demo") == "project"
     assert _parent_logical_path("project/demo/wp") == "project/demo"
+
+
+def test_container_logical_name_shares_work_scope() -> None:
+    assert _container_logical_name("initiative", "initiative/foo") == "work_scope"
+    assert _container_logical_name("project", "project/foo") == "work_scope"
+    assert _container_logical_name("goal", "goal/foo") == "goal"
+    assert _container_logical_name("work_package", "project/foo/wp") == "project/foo"
 
 
 def test_with_ensure_context_preserves_code_and_status() -> None:

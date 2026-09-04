@@ -13,6 +13,7 @@ from bellman.graph.schema_migrate import (
     is_kind_root_name,
     migrate_registry_schema,
     registry_needs_schema_migration,
+    registry_needs_work_scope_parent_migration,
 )
 
 
@@ -33,6 +34,14 @@ def test_needs_migration_invalid_json(tmp_path: Path) -> None:
     fits = tmp_path / ".fits"
     fits.mkdir()
     (fits / "registry.json").write_text("{not-json", encoding="utf-8")
+    assert registry_needs_schema_migration(tmp_path) is False
+    assert registry_needs_work_scope_parent_migration(tmp_path) is False
+
+
+def test_needs_migration_registry_not_object(tmp_path: Path) -> None:
+    fits = tmp_path / ".fits"
+    fits.mkdir()
+    (fits / "registry.json").write_text("[]\n", encoding="utf-8")
     assert registry_needs_schema_migration(tmp_path) is False
 
 
@@ -195,4 +204,123 @@ def test_migrate_write_links_failure(tmp_path: Path) -> None:
 
 def test_is_kind_root_name() -> None:
     assert is_kind_root_name("goal") is True
+    assert is_kind_root_name("work_scope") is True
     assert is_kind_root_name("wp") is False
+
+
+def test_work_scope_parent_migration_needed_for_split_kind_roots(
+    tmp_path: Path,
+) -> None:
+    init_guid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    kind_guid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    _write_registry(
+        tmp_path,
+        {
+            "node_types": [
+                {"type": KIND_TYPE},
+                {"type": "goal", "container_node": KIND_TYPE},
+            ],
+            "instances": [
+                {
+                    "guid": kind_guid,
+                    "name": "initiative",
+                    "type": KIND_TYPE,
+                    "kind": "node",
+                },
+                {
+                    "guid": init_guid,
+                    "name": "kri-image-tools",
+                    "type": "initiative",
+                    "kind": "node",
+                    "parent_guid": kind_guid,
+                },
+                "skip",
+                {"guid": 1, "name": "bad"},
+            ],
+        },
+    )
+    assert registry_needs_work_scope_parent_migration(tmp_path) is True
+    assert registry_needs_schema_migration(tmp_path) is True
+
+
+def test_work_scope_parent_migration_not_needed_when_hosted(
+    tmp_path: Path,
+) -> None:
+    work_scope = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    init_guid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    _write_registry(
+        tmp_path,
+        {
+            "node_types": [
+                {"type": KIND_TYPE},
+                {"type": "goal", "container_node": KIND_TYPE},
+            ],
+            "instances": [
+                {
+                    "guid": work_scope,
+                    "name": "work_scope",
+                    "type": KIND_TYPE,
+                    "kind": "node",
+                },
+                {
+                    "guid": init_guid,
+                    "name": "settings-manager",
+                    "type": "initiative",
+                    "kind": "node",
+                    "parent_guid": work_scope,
+                },
+                {
+                    "guid": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                    "name": "a-link",
+                    "type": "precedes_FS_Mandatory_scope",
+                    "kind": "link",
+                },
+            ],
+        },
+    )
+    assert registry_needs_work_scope_parent_migration(tmp_path) is False
+    assert registry_needs_schema_migration(tmp_path) is False
+
+
+def test_work_scope_parent_migration_skips_non_list_instances(tmp_path: Path) -> None:
+    _write_registry(
+        tmp_path,
+        {
+            "node_types": [
+                {"type": KIND_TYPE},
+                {"type": "goal", "container_node": KIND_TYPE},
+            ],
+            "instances": {"guid": "x"},
+        },
+    )
+    assert registry_needs_work_scope_parent_migration(tmp_path) is False
+
+
+def test_work_scope_parent_migration_missing_file(tmp_path: Path) -> None:
+    assert registry_needs_work_scope_parent_migration(tmp_path) is False
+
+
+def test_migrate_removes_nodes_dir(tmp_path: Path) -> None:
+    _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    nodes = tmp_path / "nodes"
+    nested = nodes / "kind" / "initiative"
+    nested.mkdir(parents=True)
+    (nested / "stale.txt").write_text("old", encoding="utf-8")
+
+    result = migrate_registry_schema(tmp_path)
+    assert isinstance(result, Ok)
+    assert not nodes.exists()
+
+
+def test_migrate_rmtree_nodes_failure(tmp_path: Path) -> None:
+    _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    nodes = tmp_path / "nodes"
+    nodes.mkdir()
+
+    def _rmtree(_path: object, *_args: object, **_kwargs: object) -> None:
+        raise OSError("busy")
+
+    with patch("bellman.graph.schema_migrate.shutil.rmtree", _rmtree):
+        result = migrate_registry_schema(tmp_path)
+    assert isinstance(result, Err)
+    assert result.err_value.code == "schema_migration_failed"

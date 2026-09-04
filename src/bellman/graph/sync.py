@@ -39,6 +39,7 @@ from bellman.graph.legacy import is_legacy_dash_qualified_id, is_legacy_flat_nod
 from bellman.graph.links_file import reconcile_link_artifacts
 from bellman.graph.registry import (
     KIND_TYPE,
+    WORK_SCOPE_KIND_ROOT,
     bootstrap_registry,
     ensure_kind_roots,
     markdown_sync_link_types,
@@ -60,6 +61,17 @@ def _parent_logical_path(logical_name: str) -> str | None:
     if "/" not in logical_name:
         return None
     return logical_name.rsplit("/", 1)[0]
+
+
+def _container_logical_name(type_name: str, logical_name: str) -> str | None:
+    """Return the graph container that should host ``logical_name``.
+
+    Initiatives and projects share the ``work_scope`` kind-root so mixed
+    scope-precedence links are nested siblings.
+    """
+    if type_name in {"initiative", "project"}:
+        return WORK_SCOPE_KIND_ROOT
+    return _parent_logical_path(logical_name)
 
 
 def _bootstrap_session(repo: Repo, root: Path) -> Result[None, FitsError]:
@@ -704,7 +716,7 @@ def _ensure_node(
         assert guid is not None
         return Ok(CreatedObject(guid=guid, name=logical_name))
 
-    parent_path = _parent_logical_path(logical_name)
+    parent_path = _container_logical_name(type_name, logical_name)
     local_name = local_name_from_node_id(logical_name)
     container_guid: Id | None = None
     if parent_path is not None:

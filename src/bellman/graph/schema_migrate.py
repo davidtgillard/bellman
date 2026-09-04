@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
 from pyfits.errors import FitsError
 from pyfits.result import Err, Ok, Result
 
-from bellman.graph.registry import KIND_ROOT_NAMES, KIND_TYPE
+from bellman.graph.registry import KIND_ROOT_NAMES, KIND_TYPE, WORK_SCOPE_KIND_ROOT
+
+_SCOPE_ENTITY_TYPES = frozenset({"initiative", "project"})
 
 _REGISTRY_PATH = Path(".fits") / "registry.json"
 
@@ -41,19 +44,21 @@ def _is_managed_link_type(link_type: str) -> bool:
     return link_type in _EXACT_MANAGED_LINKS or link_type.startswith("precedes_")
 
 
-def registry_needs_schema_migration(root: Path) -> bool:
-    """Return True when entity types are still root-scoped (no kind nesting).
-
-    Fresh registries with no bellman entity types are left for
-    :func:`bootstrap_registry` to create correctly via libfits.
-    """
+def _load_registry(root: Path) -> dict[str, Any] | None:
     path = root / _REGISTRY_PATH
     if not path.is_file():
-        return False
+        return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return False
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _needs_legacy_root_scope_migration(data: dict[str, Any]) -> bool:
+    """Return True when entity types are still root-scoped (no kind nesting)."""
     node_types = data.get("node_types")
     if not isinstance(node_types, list):
         return False
@@ -71,12 +76,87 @@ def registry_needs_schema_migration(root: Path) -> bool:
     return has_legacy_goal and not has_kind
 
 
+def registry_needs_work_scope_parent_migration(root: Path) -> bool:
+    """Return True when initiatives or projects are not under ``work_scope``.
+
+    Nested libfits links can only connect siblings. Mixed project↔initiative
+    precedence requires both types to share that kind-root parent.
+
+    Args:
+        root: Roadmap root directory.
+
+    Returns:
+        True when a live initiative or project instance is missing, or not
+        parented to, the ``work_scope`` kind-root.
+    """
+    data = _load_registry(root)
+    if data is None:
+        return False
+    return _needs_work_scope_parent_migration(data)
+
+
+def _needs_work_scope_parent_migration(data: dict[str, Any]) -> bool:
+    instances = data.get("instances")
+    if not isinstance(instances, list):
+        return False
+    by_guid: dict[str, dict[str, Any]] = {}
+    for inst in instances:
+        if not isinstance(inst, dict):
+            continue
+        guid = inst.get("guid")
+        if isinstance(guid, str):
+            by_guid[guid] = inst
+    work_scope_guid: str | None = None
+    for inst in by_guid.values():
+        if (
+            inst.get("kind") == "node"
+            and inst.get("type") == KIND_TYPE
+            and inst.get("name") == WORK_SCOPE_KIND_ROOT
+        ):
+            guid = inst.get("guid")
+            if isinstance(guid, str):
+                work_scope_guid = guid
+                break
+    for inst in by_guid.values():
+        if inst.get("kind") != "node":
+            continue
+        if inst.get("type") not in _SCOPE_ENTITY_TYPES:
+            continue
+        parent = inst.get("parent_guid")
+        if not isinstance(parent, str) or parent != work_scope_guid:
+            return True
+    return False
+
+
+def registry_needs_schema_migration(root: Path) -> bool:
+    """Return True when the registry layout is older than the current schema.
+
+    Covers pre-kind-nesting types and work scopes not yet hosted under
+    ``work_scope``. Fresh registries with no bellman entity types are left for
+    :func:`bootstrap_registry` to create correctly via libfits.
+
+    Args:
+        root: Roadmap root directory.
+
+    Returns:
+        True when bootstrap should wipe and re-register bellman types.
+    """
+    data = _load_registry(root)
+    if data is None:
+        return False
+    return _needs_legacy_root_scope_migration(
+        data
+    ) or _needs_work_scope_parent_migration(data)
+
+
 def migrate_registry_schema(root: Path) -> Result[None, FitsError]:
-    """Strip legacy root-scoped bellman types so bootstrap can re-register nested ones.
+    """Strip outdated bellman types so bootstrap can re-register the current schema.
 
     Markdown remains the source of truth: sync recreates nested nodes after
     :func:`bootstrap_registry` re-registers types via libfits (including
     ``create_folder``). Existing GUIDs for migrated entity/WP nodes are discarded.
+    Nested ``nodes/`` payloads are removed so stale subgraph indexes cannot
+    fail validation after instances are rewritten.
 
     Args:
         root: Roadmap root directory.
@@ -156,6 +236,12 @@ def migrate_registry_schema(root: Path) -> Result[None, FitsError]:
                 "}\n",
                 encoding="utf-8",
             )
+        except OSError as exc:
+            return Err(FitsError(str(exc), code="schema_migration_failed"))
+    nodes_dir = root / "nodes"
+    if nodes_dir.is_dir():
+        try:
+            shutil.rmtree(nodes_dir)
         except OSError as exc:
             return Err(FitsError(str(exc), code="schema_migration_failed"))
     return Ok(None)

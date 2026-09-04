@@ -76,14 +76,12 @@ def test_instance_index_cycle_and_missing_parent() -> None:
         )
     )
     index = InstanceIndex.from_history(history)
-    # cycle breaks without infinite loop
-    assert (
-        index.guid_for_name("a/b") is not None or index.guid_for_name("b/a") is not None
-    )
+    assert index.guid_for_name("goal/a") is not None
+    assert index.guid_for_name("goal/b") is not None
     assert index.name_for_guid("unknown") is None
     assert index.name_for_guid("parent_of--x--y") is None
     assert index.children_of("missing") == []
-    assert index.guids_for_names({"missing", "orphan"}) == {
+    assert index.guids_for_names({"missing", "goal/orphan"}) == {
         "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     }
 
@@ -160,3 +158,95 @@ def test_name_for_guid_falls_back_to_child_segment() -> None:
     index = InstanceIndex.from_history(history)
     # Wire path not stored under unknown parent prefix — last segment lookup
     assert index.name_for_guid(f"deadbeef/{goal_guid}") == "goal/reduce-churn"
+
+
+def test_instance_index_work_scopes_use_type_path_not_parent_name() -> None:
+    work_scope = "550e8400-e29b-41d4-a716-446655440000"
+    initiative_guid = "660e8400-e29b-41d4-a716-446655440001"
+    project_guid = "770e8400-e29b-41d4-a716-446655440002"
+    wp_guid = "880e8400-e29b-41d4-a716-446655440003"
+    history = GraphHistory(
+        instances=(
+            InstanceRecord(
+                guid=work_scope,
+                instance_name="work_scope",
+                type_name="kind",
+                kind="node",
+                scope="root",
+            ),
+            InstanceRecord(
+                guid=initiative_guid,
+                instance_name="settings-manager",
+                type_name="initiative",
+                kind="node",
+                scope="nested",
+                parent_guid=work_scope,
+            ),
+            InstanceRecord(
+                guid=project_guid,
+                instance_name="image-tools",
+                type_name="project",
+                kind="node",
+                scope="nested",
+                parent_guid=work_scope,
+            ),
+            InstanceRecord(
+                guid=wp_guid,
+                instance_name="export",
+                type_name="work_package",
+                kind="node",
+                scope="nested",
+                parent_guid=project_guid,
+            ),
+        )
+    )
+    index = InstanceIndex.from_history(history)
+    assert index.name_for_guid(initiative_guid) == "initiative/settings-manager"
+    assert index.name_for_guid(project_guid) == "project/image-tools"
+    assert index.name_for_guid(wp_guid) == "project/image-tools/export"
+    kids = index.children_of("work_scope")
+    assert {k.instance_name for k in kids} == {"settings-manager", "image-tools"}
+
+
+def test_qualified_path_walk_breaks_cycles_for_kind_roots() -> None:
+    a = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    b = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    history = GraphHistory(
+        instances=(
+            InstanceRecord(
+                guid=a,
+                instance_name="a",
+                type_name="kind",
+                kind="node",
+                parent_guid=b,
+            ),
+            InstanceRecord(
+                guid=b,
+                instance_name="b",
+                type_name="kind",
+                kind="node",
+                parent_guid=a,
+            ),
+        )
+    )
+    index = InstanceIndex.from_history(history)
+    assert (
+        index.guid_for_name("a/b") is not None or index.guid_for_name("b/a") is not None
+    )
+
+
+def test_work_package_without_parent_uses_local_name() -> None:
+    wp_guid = "880e8400-e29b-41d4-a716-446655440003"
+    history = GraphHistory(
+        instances=(
+            InstanceRecord(
+                guid=wp_guid,
+                instance_name="export",
+                type_name="work_package",
+                kind="node",
+                parent_guid="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            ),
+        )
+    )
+    index = InstanceIndex.from_history(history)
+    assert index.name_for_guid(wp_guid) == "export"

@@ -18,12 +18,29 @@ from bellman.graph.registry import KIND_TYPE
 
 __all__ = ["InstanceIndex"]
 
+_TYPE_QUALIFIED_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+"""Entity types whose logical id is ``{type}/{name}`` regardless of parent name."""
+
 
 def _qualified_path(
     inst: InstanceRecord,
     by_guid: dict[str, InstanceRecord],
 ) -> str:
-    """Build ``parent/.../name`` from registry parent links."""
+    """Build the Bellman logical id for a live registry instance.
+
+    Initiatives and projects nest under the shared ``work_scope`` kind-root, but
+    callers still address them as ``initiative/{name}`` / ``project/{name}``.
+    Work packages stay ``project/{project}/{slug}``.
+    """
+    if inst.type_name in _TYPE_QUALIFIED_KINDS:
+        if "/" in inst.instance_name:
+            return inst.instance_name
+        if inst.parent_guid is not None:
+            return f"{inst.type_name}/{inst.instance_name}"
+    if inst.type_name == "work_package" and inst.parent_guid is not None:
+        parent = by_guid.get(inst.parent_guid)
+        if parent is not None:
+            return f"project/{parent.instance_name}/{inst.instance_name}"
     segments: list[str] = [inst.instance_name]
     parent_guid = inst.parent_guid
     seen: set[str] = {inst.guid}
@@ -169,10 +186,6 @@ class InstanceIndex:
             return []
         return [
             inst
-            for name, inst in self.by_name.items()
-            if (
-                inst.kind == "node"
-                and inst.parent_guid == parent.guid
-                and name.startswith(f"{parent_logical}/")
-            )
+            for inst in self.by_name.values()
+            if inst.kind == "node" and inst.parent_guid == parent.guid
         ]

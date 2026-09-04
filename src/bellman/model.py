@@ -151,10 +151,16 @@ class Roadmap:
         return None
 
     def all_work_scopes(self) -> list[Initiative | Project]:
+        """Return live initiatives, projects, and unpromoted archived initiatives."""
+        archived = [
+            item
+            for item in self.archived_initiatives
+            if self.project_by_name(item.name) is None
+        ]
         return [
             *self.initiatives,
             *self.projects,
-            *self.archived_initiatives,
+            *archived,
         ]
 
     def work_package_slugs(self, project_name: str) -> set[str]:
