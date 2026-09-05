@@ -56,6 +56,96 @@ def test_promote_initiative(tmp_path: Path) -> None:
     assert not layout.initiative_path(tmp_path, "grow-feature").exists()
 
 
+def test_demote_parks_project_folder_and_restores_initiative(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "grow-feature")
+    original = layout.initiative_path(tmp_path, "grow-feature").read_text(
+        encoding="utf-8"
+    )
+    layout.promote_initiative(tmp_path, "grow-feature")
+    sidecar = layout.project_dir(tmp_path, "grow-feature") / "notes.txt"
+    sidecar.write_text("keep me\n", encoding="utf-8")
+    wp_path = layout.work_packages_path(tmp_path, "grow-feature")
+    wp_path.write_text(
+        "version: 1\n\nwork_packages:\n  - title: wp-a\n    description: TBD.\n",
+        encoding="utf-8",
+    )
+
+    restored = layout.demote_project(tmp_path, "grow-feature")
+
+    assert restored == layout.initiative_path(tmp_path, "grow-feature")
+    assert restored.read_text(encoding="utf-8") == original
+    assert not layout.project_dir(tmp_path, "grow-feature").exists()
+    stash = layout.archived_project_dir(tmp_path, "grow-feature")
+    assert stash.is_dir()
+    assert (stash / "notes.txt").read_text(encoding="utf-8") == "keep me\n"
+    assert "wp-a" in (stash / "work-packages.yaml").read_text(encoding="utf-8")
+    assert not layout.archived_initiative_path(tmp_path, "grow-feature").exists()
+
+
+def test_demote_never_promoted_project_synthesizes_initiative(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_project(tmp_path, "from-scratch")
+    project_md = layout.project_md_path(tmp_path, "from-scratch").read_text(
+        encoding="utf-8"
+    )
+    restored = layout.demote_project(tmp_path, "from-scratch")
+    assert restored.read_text(encoding="utf-8") == project_md
+    assert layout.archived_project_dir(tmp_path, "from-scratch").is_dir()
+
+
+def test_promote_restores_archived_project_folder(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "grow-feature")
+    layout.promote_initiative(tmp_path, "grow-feature")
+    (layout.project_dir(tmp_path, "grow-feature") / "notes.txt").write_text(
+        "keep me\n", encoding="utf-8"
+    )
+    layout.demote_project(tmp_path, "grow-feature")
+    restored = layout.promote_initiative(tmp_path, "grow-feature")
+    assert restored == layout.project_dir(tmp_path, "grow-feature")
+    assert (restored / "notes.txt").read_text(encoding="utf-8") == "keep me\n"
+    assert not layout.archived_project_dir(tmp_path, "grow-feature").exists()
+    assert layout.archived_initiative_path(tmp_path, "grow-feature").is_file()
+
+
+def test_demote_errors(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    with pytest.raises(BellmanLayoutError, match="project not found"):
+        layout.demote_project(tmp_path, "missing")
+    layout.create_initiative(tmp_path, "clash")
+    layout.create_project(tmp_path, "clash")
+    with pytest.raises(BellmanLayoutError, match="initiative already exists"):
+        layout.demote_project(tmp_path, "clash")
+
+
+def test_rename_initiative_renames_archived_project_stash(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "old-init")
+    layout.promote_initiative(tmp_path, "old-init")
+    (layout.project_dir(tmp_path, "old-init") / "notes.txt").write_text(
+        "keep\n", encoding="utf-8"
+    )
+    layout.demote_project(tmp_path, "old-init")
+    layout.rename_entity(tmp_path, "old-init", "new-init")
+    assert layout.initiative_path(tmp_path, "new-init").is_file()
+    stash = layout.archived_project_dir(tmp_path, "new-init")
+    assert stash.is_dir()
+    assert (stash / "new-init.md").is_file()
+    assert (stash / "notes.txt").read_text(encoding="utf-8") == "keep\n"
+    assert not layout.archived_project_dir(tmp_path, "old-init").exists()
+
+
+def test_delete_initiative_removes_archived_project_stash(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "to-delete")
+    layout.promote_initiative(tmp_path, "to-delete")
+    layout.demote_project(tmp_path, "to-delete")
+    layout.delete_entity(tmp_path, "to-delete")
+    assert not layout.initiative_path(tmp_path, "to-delete").exists()
+    assert not layout.archived_project_dir(tmp_path, "to-delete").exists()
+
+
 def test_create_project_rejects_md_suffix(tmp_path: Path) -> None:
     with pytest.raises(BellmanLayoutError, match="cannot be created"):
         layout.create_project(tmp_path, "foo.md")
@@ -278,6 +368,11 @@ def test_resolve_entity_path_matrix(tmp_path: Path) -> None:
         layout.resolve_entity_path(tmp_path, "projects/foo/bar.md")
     with pytest.raises(BellmanLayoutError, match="invalid project path"):
         layout.resolve_entity_path(tmp_path, "projects/a/b/c")
+    layout.create_initiative(tmp_path, "archived-proj")
+    layout.promote_initiative(tmp_path, "archived-proj")
+    layout.demote_project(tmp_path, "archived-proj")
+    with pytest.raises(BellmanLayoutError, match="archived project"):
+        layout.resolve_entity_path(tmp_path, "projects/archived-proj.archived")
     with pytest.raises(BellmanLayoutError, match="must be under"):
         layout.resolve_entity_path(tmp_path, "other/foo.md")
 

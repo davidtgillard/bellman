@@ -93,6 +93,7 @@ bellman create project billing-redesign
 bellman create milestone ga-release
 bellman create goal reduce-churn
 bellman promote billing-redesign   # after creating as initiative
+bellman demote billing-redesign    # park the project folder; restore the initiative
 bellman validate .
 bellman validate --no-registry .
 bellman sync .
@@ -110,7 +111,9 @@ bellman report deps beta                             # predecessors/successors o
 
 `validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
 
-`create`, `delete`, `rename`, and `promote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
+`create`, `delete`, `rename`, `promote`, and `demote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
+
+`demote` parks the whole project directory as `projects/{name}.archived/` (work packages and extra files included) and restores `initiatives/{name}.md`. A later `promote` of the same name restores that folder instead of creating an empty one.
 
 `rename` moves the entity on disk (initiative, project, milestone, or goal), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Use a bare name when it is unambiguous, a layout path such as `goals/foo.md` to pick one of several entities with the same name, or a type subcommand when initiative and goal (for example) share a name: `bellman rename goal foo bar`.
 

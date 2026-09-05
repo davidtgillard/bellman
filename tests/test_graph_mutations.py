@@ -197,3 +197,56 @@ def test_sync_coexists_goal_and_initiative_same_name(tmp_path: Path) -> None:
     assert isinstance(result, Ok)
     assert _has_live_logical(tmp_path, "goal/system-mci")
     assert _has_live_logical(tmp_path, "initiative/system-mci")
+
+
+@pytest.mark.integration
+def test_demote_removes_project_and_work_packages(tmp_path: Path) -> None:
+    if not libfits_available():
+        pytest.skip("libfits not available")
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "kri-image-tools")
+    layout.create_initiative(tmp_path, "settings-manager-mvp")
+    _add_scope_dependency(
+        tmp_path, dep="settings-manager-mvp", target="kri-image-tools"
+    )
+    _bootstrap_pyfits(tmp_path)
+    assert isinstance(sync_roadmap(tmp_path), Ok)
+
+    layout.promote_initiative(tmp_path, "kri-image-tools")
+    layout.work_packages_path(tmp_path, "kri-image-tools").write_text(
+        "version: 1\n\nwork_packages:\n  - title: wp-a\n    description: TBD.\n",
+        encoding="utf-8",
+    )
+    assert isinstance(sync_roadmap(tmp_path, prune=True), Ok)
+    assert _has_live_logical(tmp_path, "project/kri-image-tools/wp-a")
+
+    layout.demote_project(tmp_path, "kri-image-tools")
+    result = sync_roadmap(tmp_path)
+    assert isinstance(result, Ok)
+    assert _logical_type(tmp_path, "initiative/kri-image-tools") == "initiative"
+    assert _has_live_logical(tmp_path, "initiative/kri-image-tools")
+    assert not _has_live_logical(tmp_path, "project/kri-image-tools")
+    assert not _has_live_logical(tmp_path, "project/kri-image-tools/wp-a")
+    assert _graph_has_desired_link(
+        tmp_path,
+        DesiredLink(
+            "precedes_FS_Mandatory_scope",
+            "initiative/kri-image-tools",
+            "initiative/settings-manager-mvp",
+        ),
+    )
+
+    layout.promote_initiative(tmp_path, "kri-image-tools")
+    result = sync_roadmap(tmp_path)
+    assert isinstance(result, Ok)
+    assert _has_live_logical(tmp_path, "project/kri-image-tools")
+    assert _has_live_logical(tmp_path, "project/kri-image-tools/wp-a")
+    assert not _has_live_logical(tmp_path, "initiative/kri-image-tools")
+    assert _graph_has_desired_link(
+        tmp_path,
+        DesiredLink(
+            "precedes_FS_Mandatory_scope",
+            "project/kri-image-tools",
+            "initiative/settings-manager-mvp",
+        ),
+    )

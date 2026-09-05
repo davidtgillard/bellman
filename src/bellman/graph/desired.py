@@ -182,7 +182,8 @@ def resolve_entity_ref_from_layout(root: Path, ref: str) -> str:
         ValueError: When more than one entity kind matches ``ref``.
     """
     matches: list[tuple[str, str]] = []
-    if layout.project_dir(root, ref).is_dir():
+    live_project = layout.project_dir(root, ref)
+    if live_project.is_dir() and not layout.is_archived_project_dir(live_project):
         matches.append(("project", entity_node_id("project", ref)))
     if layout.initiative_path(root, ref).is_file():
         matches.append(("initiative", entity_node_id("initiative", ref)))

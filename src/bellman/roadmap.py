@@ -79,7 +79,7 @@ def load_for_validation(root: Path) -> LoadResult:
     proj_dir = root / layout.PROJECTS_DIR
     if proj_dir.is_dir():
         for pdir in sorted(proj_dir.iterdir()):
-            if not pdir.is_dir():
+            if not pdir.is_dir() or layout.is_archived_project_dir(pdir):
                 continue
             md = layout.project_md_path(root, pdir.name)
             wp = layout.work_packages_path(root, pdir.name)

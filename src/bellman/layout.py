@@ -15,6 +15,8 @@ PROJECTS_DIR = "projects"
 MILESTONES_DIR = "milestones"
 GOALS_DIR = "goals"
 ARCHIVED_SUFFIX = ".archived.md"
+ARCHIVED_PROJECT_DIR_SUFFIX = ".archived"
+"""Directory suffix for a project folder parked by :func:`demote_project`."""
 
 WORK_SCOPE_SECTIONS = (
     "## Introduction\n\nTBD.\n\n"
@@ -167,6 +169,40 @@ def project_dir(root: Path, name: str) -> Path:
     return root / PROJECTS_DIR / name
 
 
+def archived_project_dir(root: Path, name: str) -> Path:
+    """Return the parked project directory ``projects/{name}.archived``.
+
+    Args:
+        root: Roadmap root directory.
+        name: Project natural name (kebab-case).
+
+    Returns:
+        Path of the archived project folder, which may not exist yet.
+    """
+    return root / PROJECTS_DIR / f"{name}{ARCHIVED_PROJECT_DIR_SUFFIX}"
+
+
+def is_archived_project_dir(path: Path) -> bool:
+    """Return True when ``path`` is a parked project directory name.
+
+    Args:
+        path: Filesystem path to test.
+
+    Returns:
+        True when the final path segment ends with
+        :data:`ARCHIVED_PROJECT_DIR_SUFFIX`.
+    """
+    return path.name.endswith(ARCHIVED_PROJECT_DIR_SUFFIX)
+
+
+def _live_project_name(pdir: Path) -> str:
+    """Return the live project name for a live or archived project directory."""
+    name = pdir.name
+    if name.endswith(ARCHIVED_PROJECT_DIR_SUFFIX):
+        return name[: -len(ARCHIVED_PROJECT_DIR_SUFFIX)]
+    return name
+
+
 def project_md_path(root: Path, name: str) -> Path:
     return project_dir(root, name) / f"{name}.md"
 
@@ -209,6 +245,8 @@ def create_project(root: Path, raw_name: str) -> Path:
     pdir = project_dir(root, name)
     if pdir.exists():
         raise BellmanLayoutError(f"project already exists: {pdir}")
+    if archived_project_dir(root, name).exists():
+        raise BellmanLayoutError(f"archived project already exists: {name}")
     title = name.replace("-", " ").title()
     scope = (
         f"# {title}\n\n"
@@ -325,6 +363,12 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
         return "initiative", path
 
     if top == PROJECTS_DIR:
+        if len(parts) >= 2 and parts[1].endswith(ARCHIVED_PROJECT_DIR_SUFFIX):
+            msg = (
+                f"invalid project path {ref!r}; "
+                "archived project directories are not live entities"
+            )
+            raise BellmanLayoutError(msg)
         if len(parts) == 2 and not parts[1].endswith(".md"):
             path = root_resolved / rel
             if not path.is_dir():
@@ -427,7 +471,10 @@ def find_entity_by_kind(root: Path, kind: str, name: str) -> tuple[str, Path]:
 
 def _destination_exists(root: Path, kind: str, name: str) -> bool:
     if kind == "project":
-        return project_dir(root, name).exists()
+        return (
+            project_dir(root, name).exists()
+            or archived_project_dir(root, name).exists()
+        )
     if kind == "archived-initiative":
         return archived_initiative_path(root, name).exists()
     if kind == "initiative":
@@ -504,7 +551,7 @@ def _rewrite_dependency_refs(root: Path, *, old_name: str, new_name: str) -> Non
         for pdir in projects_dir.iterdir():
             if not pdir.is_dir():
                 continue
-            md_path = pdir / f"{pdir.name}.md"
+            md_path = pdir / f"{_live_project_name(pdir)}.md"
             if md_path.is_file():
                 text = md_path.read_text(encoding="utf-8")
                 lines = [
@@ -610,6 +657,7 @@ def rename_entity(
     elif resolved_kind == "initiative":
         new_path = initiative_path(root, new_name)
         _move_markdown_entity(path, new_path)
+        _rename_archived_project_stash(root, old_name, new_name)
     elif resolved_kind == "milestone":
         new_path = milestone_path(root, new_name)
         _move_markdown_entity(path, new_path)
@@ -651,29 +699,121 @@ def delete_entity(root: Path, ref: str, *, force: bool = False) -> DeletedEntity
         shutil.rmtree(path)
     else:
         path.unlink()
+        if kind == "initiative":
+            stash = archived_project_dir(root, name)
+            if stash.is_dir():
+                shutil.rmtree(stash)
     return DeletedEntity(kind=kind, name=name, path=path)
 
 
+def _rename_archived_project_stash(root: Path, old_name: str, new_name: str) -> None:
+    """Rename a parked project folder when its live initiative is renamed."""
+    old_stash = archived_project_dir(root, old_name)
+    if not old_stash.is_dir():
+        return
+    new_stash = archived_project_dir(root, new_name)
+    if new_stash.exists():
+        msg = f"archived project already exists: {new_name}"
+        raise BellmanLayoutError(msg)
+    old_stash.rename(new_stash)
+    old_md = new_stash / f"{old_name}.md"
+    new_md = new_stash / f"{new_name}.md"
+    if old_md.is_file() and old_md != new_md:
+        old_md.rename(new_md)
+
+
 def promote_initiative(root: Path, raw_name: str) -> Path:
-    """Promote initiative to project; archive initiative file."""
+    """Promote a live initiative to a project.
+
+    Restores ``projects/{name}.archived/`` when that stash exists from a
+    previous demote. Otherwise creates a new project folder from the
+    initiative markdown.
+
+    Args:
+        root: Roadmap root directory.
+        raw_name: Initiative natural name (kebab-case).
+
+    Returns:
+        Path of the live project directory.
+
+    Raises:
+        BellmanLayoutError: When the initiative is missing, a live project
+            already exists, or the promote cannot be completed.
+        ValueError: When ``raw_name`` is not valid kebab-case.
+    """
     name = normalize_entity_name(raw_name)
     src = initiative_path(root, name)
     if not src.exists():
         msg = f"initiative not found: {src}"
         raise BellmanLayoutError(msg)
-    if project_dir(root, name).exists():
+    pdir = project_dir(root, name)
+    if pdir.exists():
         msg = f"project already exists: {name}"
         raise BellmanLayoutError(msg)
+
+    stash = archived_project_dir(root, name)
+    archive = archived_initiative_path(root, name)
+    if stash.is_dir():
+        stash.rename(pdir)
+        src.rename(archive)
+        return pdir
+
     content = src.read_text(encoding="utf-8")
     has_criteria = (
         "### Criteria for Success" in content or "## Criteria for Success" in content
     )
     if not has_criteria:
         content = content.rstrip() + "\n\n### Criteria for Success\n\nTBD.\n"
-    pdir = project_dir(root, name)
     pdir.mkdir(parents=True)
     _write_text(project_md_path(root, name), content)
     _write_text(work_packages_path(root, name), WORK_PACKAGES_TEMPLATE)
-    archive = archived_initiative_path(root, name)
     src.rename(archive)
     return pdir
+
+
+def demote_project(root: Path, raw_name: str) -> Path:
+    """Demote a live project to an initiative; park the project folder.
+
+    Renames ``projects/{name}/`` to ``projects/{name}.archived/`` without
+    rewriting files. Restores ``initiatives/{name}.archived.md`` when present;
+    otherwise copies the project markdown to a new initiative file.
+
+    Args:
+        root: Roadmap root directory.
+        raw_name: Project natural name (kebab-case).
+
+    Returns:
+        Path of the live initiative markdown file.
+
+    Raises:
+        BellmanLayoutError: When the project is missing, a live initiative
+            already exists, an archived project folder already exists, or
+            the demote cannot be completed.
+        ValueError: When ``raw_name`` is not valid kebab-case.
+    """
+    name = normalize_entity_name(raw_name)
+    pdir = project_dir(root, name)
+    if not pdir.is_dir():
+        msg = f"project not found: {pdir}"
+        raise BellmanLayoutError(msg)
+    dest = initiative_path(root, name)
+    if dest.exists():
+        msg = f"initiative already exists: {name}"
+        raise BellmanLayoutError(msg)
+    stash = archived_project_dir(root, name)
+    if stash.exists():
+        msg = f"archived project already exists: {name}"
+        raise BellmanLayoutError(msg)
+
+    archive = archived_initiative_path(root, name)
+    if archive.is_file():
+        archive.rename(dest)
+    else:
+        src_md = project_md_path(root, name)
+        if not src_md.is_file():
+            msg = f"project markdown not found: {src_md}"
+            raise BellmanLayoutError(msg)
+        _write_text(dest, src_md.read_text(encoding="utf-8"))
+
+    pdir.rename(stash)
+    return dest

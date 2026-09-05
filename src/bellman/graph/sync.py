@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from pyfits import CreatedObject, Id, InstanceName, ObjectTypeName, Repo, ValidateResult
@@ -323,6 +324,97 @@ def _deleted_node_names(kind: str, name: str, root: Path) -> set[str]:
             ):
                 names.add(logical_name)
     return names
+
+
+def _park_and_remove_instance(
+    repo: Repo,
+    guid: Id,
+    *,
+    base_name: str,
+) -> Result[None, FitsError]:
+    """Rename ``guid`` aside, then remove it so the original name is not tombstoned.
+
+    Args:
+        repo: Open pyfits repository session.
+        guid: Wire id of the instance to drop.
+        base_name: Original local instance name (used only to build a unique
+            parked name).
+
+    Returns:
+        ``Ok(None)`` when the instance is parked and removed.
+        ``Err(FitsError)`` when rename or remove fails.
+    """
+    parked = InstanceName(f"{base_name}-archived-{uuid.uuid4().hex[:8]}")
+    renamed = repo.rename_instance(guid=guid, new_name=parked)
+    if isinstance(renamed, Err):
+        return renamed
+    return ignore_nothing_to_remove(repo.remove(guid))
+
+
+def _remove_demoted_project_graph(
+    repo: Repo,
+    root: Path,
+    graph: Graph,
+    name: str,
+) -> Result[Graph, FitsError]:
+    """Remove a parked project's graph nodes and nested work packages.
+
+    Nested initiative and project instances share the ``work_scope`` parent, so
+    the project is renamed aside before removal. Otherwise libfits tombstones
+    the original name and creating ``initiative/{name}`` fails.
+
+    Args:
+        repo: Open pyfits repository session.
+        root: Roadmap root directory.
+        graph: Current graph snapshot; returned unchanged when nothing is removed.
+        name: Project natural name (kebab-case).
+
+    Returns:
+        ``Ok(graph)`` with a reloaded snapshot when nodes were removed, or the
+        original ``graph`` when no matching instances existed.
+        ``Err(FitsError)`` when link repair or node removal fails.
+    """
+    node_names = _deleted_node_names("project", name, root)
+    reconciled = reconcile_link_artifacts(root, drop_touching_nodes=node_names)
+    if isinstance(reconciled, Err):
+        return reconciled
+    index_result = InstanceIndex.load(root)
+    if isinstance(index_result, Err):
+        return Err(_history_to_fits_error(index_result.err_value))
+    index = index_result.ok_value
+    project_logical = entity_node_id("project", name)
+    project_guid = index.guid_for_name(project_logical)
+    if project_guid is None:
+        return Ok(graph)
+
+    wp_names = {
+        logical_name
+        for logical_name in node_names
+        if logical_name.startswith(f"{project_logical}/")
+    }
+    for logical_name in sorted(
+        wp_names,
+        key=lambda node: node.count("/"),
+        reverse=True,
+    ):
+        guid = index.guid_for_name(logical_name)
+        if guid is None:
+            continue
+        slug = logical_name.rsplit("/", 1)[-1]
+        parked_wp = _park_and_remove_instance(repo, guid, base_name=slug)
+        if isinstance(parked_wp, Err):
+            return parked_wp
+
+    # Nested work_scope siblings share a name namespace. Removing the project
+    # under its original name tombstones that name; park first so demote can
+    # create initiative/{name}.
+    parked = _park_and_remove_instance(repo, project_guid, base_name=name)
+    if isinstance(parked, Err):
+        return parked
+    reloaded = _reload_graph(repo)
+    if isinstance(reloaded, Err):
+        return reloaded
+    return Ok(reloaded.ok_value)
 
 
 def _rename_graph_kind(kind: str) -> str:
@@ -1025,6 +1117,19 @@ def sync_roadmap(
         graph = graph_result.ok_value
 
         for initiative in roadmap.initiatives:
+            if not layout.archived_project_dir(root, initiative.name).is_dir():
+                continue
+            removed = _remove_demoted_project_graph(
+                repo,
+                root,
+                graph,
+                initiative.name,
+            )
+            if isinstance(removed, Err):
+                return removed
+            graph = removed.ok_value
+
+        for initiative in roadmap.initiatives:
             res = _ensure_node(
                 repo,
                 root,
@@ -1057,9 +1162,13 @@ def sync_roadmap(
                     init_logical = entity_node_id("initiative", project.name)
                     init_guid = index_result.ok_value.guid_for_name(init_logical)
                     if init_guid is not None:
-                        removed = repo.remove(init_guid)
-                        if isinstance(removed, Err):
-                            return removed
+                        parked = _park_and_remove_instance(
+                            repo,
+                            init_guid,
+                            base_name=project.name,
+                        )
+                        if isinstance(parked, Err):
+                            return parked
                         reloaded = _reload_graph(repo)
                         if isinstance(reloaded, Err):
                             return reloaded

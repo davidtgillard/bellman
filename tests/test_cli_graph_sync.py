@@ -234,6 +234,76 @@ def test_promote_without_libfits_notes(tmp_path: Path) -> None:
     assert "libfits not found" in result.output
 
 
+def test_demote_success_calls_sync(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "to-demote")
+    layout.promote_initiative(tmp_path, "to-demote")
+    sync_calls: list[bool] = []
+
+    def fake_sync(root: Path, *, prune: bool = False) -> Ok[None]:
+        sync_calls.append(prune)
+        return Ok(None)
+
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch("bellman.cli.sync_roadmap", side_effect=fake_sync),
+    ):
+        result = runner.invoke(
+            app,
+            ["demote", "to-demote", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert "Demoted to" in result.output
+    assert layout.initiative_path(tmp_path, "to-demote").is_file()
+    assert layout.archived_project_dir(tmp_path, "to-demote").is_dir()
+    assert sync_calls == [False]
+    assert "Graph sync passed." in result.output
+
+
+def test_demote_missing_exits_1(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout.ensure_roadmap_dirs(tmp_path)
+    result = runner.invoke(
+        app,
+        ["demote", "missing-proj", "--path", str(tmp_path)],
+    )
+    assert result.exit_code == 1
+    assert "not found" in result.output
+
+
+def test_demote_sync_failure_exits_1(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_project(tmp_path, "demo-fail")
+    with (
+        patch("bellman.cli.libfits_available", return_value=True),
+        patch(
+            "bellman.cli.sync_roadmap",
+            return_value=Err(FitsError("demo boom", code="test")),
+        ),
+    ):
+        result = runner.invoke(
+            app,
+            ["demote", "demo-fail", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 1
+    assert "Graph sync failed" in result.output
+
+
+def test_demote_without_libfits_notes(tmp_path: Path) -> None:
+    _write_fits_marker(tmp_path)
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_project(tmp_path, "demo-note")
+    with patch("bellman.cli.libfits_available", return_value=False):
+        result = runner.invoke(
+            app,
+            ["demote", "demo-note", "--path", str(tmp_path)],
+        )
+    assert result.exit_code == 0
+    assert "libfits not found" in result.output
+
+
 def test_rename_bare_calls_sync_renamed_entity(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout_dir = tmp_path / "goals"

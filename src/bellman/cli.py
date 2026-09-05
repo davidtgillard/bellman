@@ -363,6 +363,30 @@ def promote(
     _apply_graph_sync(root)
 
 
+@app.command()
+def demote(
+    name: Annotated[str, typer.Argument(help="Project name to demote")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Demote a project to an initiative; park the project folder.
+
+    Args:
+        name: Project natural name (kebab-case).
+        path: Roadmap root, or ``None`` to discover from the current directory.
+
+    Raises:
+        typer.Exit: When the project cannot be demoted or graph sync fails.
+    """
+    root = _root(path)
+    try:
+        restored = layout.demote_project(root, name)
+        typer.echo(f"Demoted to {restored}")
+    except (BellmanLayoutError, ValueError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    _apply_graph_sync(root)
+
+
 _RENAME_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
 
 
