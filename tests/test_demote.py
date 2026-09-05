@@ -48,7 +48,7 @@ def test_cli_promote_demote_promote_round_trip(tmp_path: Path) -> None:
     ):
         promoted = runner.invoke(
             app,
-            ["promote", "round-trip", "--path", str(tmp_path)],
+            ["promote", "initiatives/round-trip.md", "--path", str(tmp_path)],
         )
         assert promoted.exit_code == 0
 
@@ -62,7 +62,7 @@ def test_cli_promote_demote_promote_round_trip(tmp_path: Path) -> None:
 
         demoted = runner.invoke(
             app,
-            ["demote", "round-trip", "--path", str(tmp_path)],
+            ["demote", "projects/round-trip", "--path", str(tmp_path)],
         )
         assert demoted.exit_code == 0
         initiative_v2 = layout.initiative_path(tmp_path, "round-trip").read_text(
@@ -79,7 +79,7 @@ def test_cli_promote_demote_promote_round_trip(tmp_path: Path) -> None:
 
         repromoted = runner.invoke(
             app,
-            ["promote", "round-trip", "--path", str(tmp_path)],
+            ["promote", "initiative/round-trip", "--path", str(tmp_path)],
         )
         assert repromoted.exit_code == 0
         project_v2 = _tree_snapshot(project_dir)

@@ -111,7 +111,7 @@ def test_promote_restores_archived_project_folder(tmp_path: Path) -> None:
 
 def test_demote_errors(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    with pytest.raises(BellmanLayoutError, match="project not found"):
+    with pytest.raises(BellmanLayoutError, match="no project named"):
         layout.demote_project(tmp_path, "missing")
     layout.create_initiative(tmp_path, "clash")
     layout.create_project(tmp_path, "clash")
@@ -334,28 +334,38 @@ def test_resolve_entity_path_matrix(tmp_path: Path) -> None:
     archived.write_text("# Old\n", encoding="utf-8")
 
     assert layout.resolve_entity_path(tmp_path, "goals/g1.md")[0] == "goal"
+    assert layout.resolve_entity_path(tmp_path, "goals/g1")[0] == "goal"
+    assert layout.resolve_entity_path(tmp_path, "goal/g1")[0] == "goal"
     assert layout.resolve_entity_path(tmp_path, "milestones/m1.md")[0] == "milestone"
+    assert layout.resolve_entity_path(tmp_path, "milestones/m1")[0] == "milestone"
+    assert layout.resolve_entity_path(tmp_path, "milestone/m1")[0] == "milestone"
     assert layout.resolve_entity_path(tmp_path, "initiatives/i1.md")[0] == "initiative"
+    assert layout.resolve_entity_path(tmp_path, "initiatives/i1")[0] == "initiative"
+    assert layout.resolve_entity_path(tmp_path, "initiative/i1")[0] == "initiative"
     assert (
         layout.resolve_entity_path(tmp_path, "initiatives/old-init.archived.md")[0]
         == "archived-initiative"
     )
     assert layout.resolve_entity_path(tmp_path, "projects/p1")[0] == "project"
+    assert layout.resolve_entity_path(tmp_path, "project/p1")[0] == "project"
     assert layout.resolve_entity_path(tmp_path, "projects/p1/p1.md")[0] == "project"
+    assert layout.resolve_entity_path(tmp_path, "project/p1/p1.md")[0] == "project"
+    abs_project = str((tmp_path / "projects" / "p1").resolve())
+    assert layout.resolve_entity_path(tmp_path, abs_project)[0] == "project"
 
     with pytest.raises(BellmanLayoutError, match="invalid entity path"):
         layout.resolve_entity_path(tmp_path, ".")
-    with pytest.raises(BellmanLayoutError, match="invalid goal path"):
+    with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "goals/foo")
     with pytest.raises(BellmanLayoutError, match="invalid goal path"):
         layout.resolve_entity_path(tmp_path, "goals/a/b.md")
     with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "goals/missing.md")
-    with pytest.raises(BellmanLayoutError, match="invalid milestone path"):
+    with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "milestones/x")
     with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "milestones/missing.md")
-    with pytest.raises(BellmanLayoutError, match="invalid initiative path"):
+    with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "initiatives/x")
     with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "initiatives/missing.md")
@@ -494,7 +504,7 @@ work_packages:
 
 def test_promote_errors_and_existing_criteria(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    with pytest.raises(BellmanLayoutError, match="initiative not found"):
+    with pytest.raises(BellmanLayoutError, match="no initiative named"):
         layout.promote_initiative(tmp_path, "missing")
     layout.create_initiative(tmp_path, "clash")
     layout.create_project(tmp_path, "clash")
@@ -511,3 +521,108 @@ def test_promote_errors_and_existing_criteria(tmp_path: Path) -> None:
     md = layout.project_md_path(tmp_path, "has-criteria").read_text(encoding="utf-8")
     assert md.count("### Criteria for Success") == 1
     assert "Done." in md
+
+
+def test_resolve_entity_name_fqn_and_paths(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "grow-feature")
+    layout.create_project(tmp_path, "billing")
+    layout.create_goal(tmp_path, "reduce-churn")
+
+    by_name = layout.resolve_entity(tmp_path, "grow-feature")
+    assert by_name.kind == "initiative"
+    assert by_name.name == "grow-feature"
+    assert by_name.path == layout.initiative_path(tmp_path, "grow-feature")
+
+    lone_md = layout.resolve_entity(tmp_path, "grow-feature.md")
+    assert lone_md.kind == "initiative"
+    assert lone_md.name == "grow-feature"
+
+    fqn = layout.resolve_entity(tmp_path, "initiatives/grow-feature")
+    assert fqn.kind == "initiative"
+    md_path = layout.resolve_entity(tmp_path, "initiatives/grow-feature.md")
+    assert md_path.path == fqn.path
+    graph_fqn = layout.resolve_entity(tmp_path, "initiative/grow-feature")
+    assert graph_fqn.kind == "initiative"
+
+    project = layout.resolve_entity(tmp_path, "projects/billing")
+    assert project.kind == "project"
+    assert project.name == "billing"
+    by_md = layout.resolve_entity(tmp_path, "projects/billing/billing.md")
+    assert by_md.path == layout.project_dir(tmp_path, "billing")
+
+    typed = layout.resolve_entity(tmp_path, "grow-feature", expected_kind="initiative")
+    assert typed.kind == "initiative"
+    with pytest.raises(BellmanLayoutError, match="cannot use goal"):
+        layout.resolve_entity(
+            tmp_path, "goals/reduce-churn.md", expected_kind="initiative"
+        )
+    with pytest.raises(BellmanLayoutError, match="cannot use project"):
+        layout.resolve_entity(tmp_path, "projects/billing", expected_kind="goal")
+
+
+def test_live_initiative_fqn_does_not_match_archived(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "parked")
+    layout.promote_initiative(tmp_path, "parked")
+    with pytest.raises(BellmanLayoutError, match="no entity"):
+        layout.resolve_entity_path(tmp_path, "initiatives/parked")
+    archived = layout.resolve_entity_path(tmp_path, "initiatives/parked.archived.md")
+    assert archived[0] == "archived-initiative"
+
+
+def test_promote_and_demote_accept_paths_and_fqn(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_initiative(tmp_path, "path-promo")
+    layout.promote_initiative(tmp_path, "initiatives/path-promo.md")
+    assert layout.project_dir(tmp_path, "path-promo").is_dir()
+    restored = layout.demote_project(tmp_path, "projects/path-promo")
+    assert restored == layout.initiative_path(tmp_path, "path-promo")
+    layout.promote_initiative(tmp_path, "initiative/path-promo")
+    layout.demote_project(tmp_path, "project/path-promo/path-promo.md")
+    assert layout.initiative_path(tmp_path, "path-promo").is_file()
+
+
+def test_promote_rejects_non_initiative_path(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_goal(tmp_path, "not-an-init")
+    with pytest.raises(BellmanLayoutError, match="cannot use goal"):
+        layout.promote_initiative(tmp_path, "goals/not-an-init")
+
+
+def test_typed_rename_accepts_path(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_goal(tmp_path, "old-goal")
+    renamed = layout.rename_entity(tmp_path, "goals/old-goal", "new-goal", kind="goal")
+    assert renamed.new_name == "new-goal"
+    assert layout.goal_path(tmp_path, "new-goal").is_file()
+
+
+def test_resolve_entity_filter_wp_fallback(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    layout.create_project(tmp_path, "demo")
+    assert layout.resolve_entity_filter(tmp_path, "projects/demo") == "demo"
+    assert layout.resolve_entity_filter(tmp_path, "demo/second") == "demo/second"
+    assert layout.resolve_entity_filter(tmp_path, "demo") == "demo"
+
+
+def test_resolve_entity_path_edge_refs(tmp_path: Path) -> None:
+    layout.ensure_roadmap_dirs(tmp_path)
+    with pytest.raises(ValueError, match="kebab-case"):
+        layout.resolve_entity(tmp_path, "")
+    with pytest.raises(BellmanLayoutError, match="invalid entity path"):
+        layout.resolve_entity_path(tmp_path, "./.")
+    with pytest.raises(BellmanLayoutError, match="outside roadmap"):
+        layout.resolve_entity_path(tmp_path, str(tmp_path.parent / "outside-entity"))
+    with pytest.raises(BellmanLayoutError, match="invalid entity path"):
+        layout.resolve_entity_path(tmp_path, str(tmp_path.resolve()))
+    with pytest.raises(BellmanLayoutError, match="no entity"):
+        layout.resolve_entity_path(tmp_path, "initiatives/missing.archived.md")
+    with pytest.raises(BellmanLayoutError, match="unknown entity kind"):
+        layout.resolve_entity(tmp_path, "g1", expected_kind="bogus")
+
+    archived = layout.archived_initiative_path(tmp_path, "old-init")
+    archived.write_text("# Old\n", encoding="utf-8")
+    kind, path = layout.resolve_entity_path(tmp_path, "initiatives/old-init.archived")
+    assert kind == "archived-initiative"
+    assert path == archived.resolve()

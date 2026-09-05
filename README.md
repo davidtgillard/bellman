@@ -93,20 +93,26 @@ bellman create project billing-redesign
 bellman create milestone ga-release
 bellman create goal reduce-churn
 bellman promote billing-redesign   # after creating as initiative
+bellman promote initiatives/billing-redesign
 bellman demote billing-redesign    # park the project folder; restore the initiative
+bellman demote projects/billing-redesign/billing-redesign.md
 bellman validate .
 bellman validate --no-registry .
 bellman sync .
 bellman version
 bellman update --check
 bellman delete my-goal
+bellman delete goals/my-goal.md
 bellman rename old-name new-name
+bellman rename projects/old-proj new-proj
 bellman rename goal system-mci renamed-goal   # when names collide across types
 bellman plugin list
 bellman plugin my-plugin
 bellman report wbs tree --project billing-redesign   # PERT tree to stdout
+bellman report wbs tree --project projects/billing-redesign
 bellman report dependencies                          # all precedence edges
 bellman report deps beta                             # predecessors/successors of beta
+bellman report deps initiatives/beta
 ```
 
 `validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
@@ -115,7 +121,7 @@ bellman report deps beta                             # predecessors/successors o
 
 `demote` parks the whole project directory as `projects/{name}.archived/` (work packages and extra files included) and restores `initiatives/{name}.md`. A later `promote` of the same name restores that folder instead of creating an empty one.
 
-`rename` moves the entity on disk (initiative, project, milestone, or goal), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Use a bare name when it is unambiguous, a layout path such as `goals/foo.md` to pick one of several entities with the same name, or a type subcommand when initiative and goal (for example) share a name: `bellman rename goal foo bar`.
+`rename` moves the entity on disk (initiative, project, milestone, or goal), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Entity-targeting commands (`promote`, `demote`, `delete`, `rename`, `report deps`, `report wbs --project`) accept a bare name when it is unambiguous across types, a layout FQN such as `projects/foo` or `initiatives/foo`, a folder path (`projects/foo`), or the main markdown path (`projects/foo/foo.md`, `goals/foo.md`). Graph FQNs (`project/foo`, `goal/foo`) work as well. Use a type subcommand when initiative and goal (for example) share a name: `bellman rename goal foo bar`.
 
 ## Precedence dependencies
 

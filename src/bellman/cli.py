@@ -42,6 +42,19 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+_ENTITY_ID_HELP = (
+    "Name, FQN, or layout path (e.g. my-project, projects/my-project, "
+    "projects/my-project/my-project.md)"
+)
+_INITIATIVE_ID_HELP = (
+    "Initiative name, FQN, or path (e.g. my-init, initiatives/my-init, "
+    "initiatives/my-init.md)"
+)
+_PROJECT_ID_HELP = (
+    "Project name, FQN, or path (e.g. my-project, projects/my-project, "
+    "projects/my-project/my-project.md)"
+)
+
 
 @app.callback()
 def _cli_entry(ctx: typer.Context) -> None:
@@ -327,12 +340,7 @@ def create_goal(
 
 @app.command()
 def delete(
-    name: Annotated[
-        str,
-        typer.Argument(
-            help="Entity natural name or layout-relative path (e.g. goals/foo.md)"
-        ),
-    ],
+    name: Annotated[str, typer.Argument(help=_ENTITY_ID_HELP)],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
     force: Annotated[bool, typer.Option("--force", help="Force delete")] = False,
 ) -> None:
@@ -341,15 +349,16 @@ def delete(
     try:
         deleted = layout.delete_entity(root, name, force=force)
         typer.echo(f"Deleted {deleted.path.relative_to(root)}")
-    except BellmanLayoutError as exc:
-        typer.echo(exc.message, err=True)
+    except (BellmanLayoutError, ValueError) as exc:
+        message = exc.message if isinstance(exc, BellmanLayoutError) else str(exc)
+        typer.echo(message, err=True)
         raise typer.Exit(code=1) from exc
     _apply_deleted_entity_prune(root, deleted.kind, deleted.name)
 
 
 @app.command()
 def promote(
-    name: Annotated[str, typer.Argument(help="Initiative name to promote")],
+    name: Annotated[str, typer.Argument(help=_INITIATIVE_ID_HELP)],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
 ) -> None:
     """Promote an initiative to a project."""
@@ -365,13 +374,13 @@ def promote(
 
 @app.command()
 def demote(
-    name: Annotated[str, typer.Argument(help="Project name to demote")],
+    name: Annotated[str, typer.Argument(help=_PROJECT_ID_HELP)],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
 ) -> None:
     """Demote a project to an initiative; park the project folder.
 
     Args:
-        name: Project natural name (kebab-case).
+        name: Project name, FQN, or layout path.
         path: Roadmap root, or ``None`` to discover from the current directory.
 
     Raises:
@@ -426,7 +435,7 @@ app.add_typer(rename_app, name="rename")
 
 @rename_app.command("_bare", hidden=True)
 def rename_bare(
-    old_name: Annotated[str, typer.Argument(help="Current entity name (kebab-case)")],
+    old_name: Annotated[str, typer.Argument(help=_ENTITY_ID_HELP)],
     new_name: Annotated[str, typer.Argument(help="New entity name (kebab-case)")],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
 ) -> None:
@@ -436,9 +445,7 @@ def rename_bare(
 
 @rename_app.command("initiative")
 def rename_initiative(
-    old_name: Annotated[
-        str, typer.Argument(help="Current initiative name (kebab-case)")
-    ],
+    old_name: Annotated[str, typer.Argument(help=_INITIATIVE_ID_HELP)],
     new_name: Annotated[str, typer.Argument(help="New initiative name (kebab-case)")],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
 ) -> None:
@@ -448,7 +455,7 @@ def rename_initiative(
 
 @rename_app.command("project")
 def rename_project(
-    old_name: Annotated[str, typer.Argument(help="Current project name (kebab-case)")],
+    old_name: Annotated[str, typer.Argument(help=_PROJECT_ID_HELP)],
     new_name: Annotated[str, typer.Argument(help="New project name (kebab-case)")],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
 ) -> None:
@@ -459,7 +466,13 @@ def rename_project(
 @rename_app.command("milestone")
 def rename_milestone(
     old_name: Annotated[
-        str, typer.Argument(help="Current milestone name (kebab-case)")
+        str,
+        typer.Argument(
+            help=(
+                "Milestone name, FQN, or path (e.g. ga-release, "
+                "milestones/ga-release, milestones/ga-release.md)"
+            )
+        ),
     ],
     new_name: Annotated[str, typer.Argument(help="New milestone name (kebab-case)")],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
@@ -470,7 +483,15 @@ def rename_milestone(
 
 @rename_app.command("goal")
 def rename_goal(
-    old_name: Annotated[str, typer.Argument(help="Current goal name (kebab-case)")],
+    old_name: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Goal name, FQN, or path (e.g. reduce-churn, goals/reduce-churn, "
+                "goals/reduce-churn.md)"
+            )
+        ),
+    ],
     new_name: Annotated[str, typer.Argument(help="New goal name (kebab-case)")],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
 ) -> None:
@@ -534,6 +555,16 @@ def _load_roadmap(path: Path | None) -> tuple[Path, Roadmap]:
         raise typer.Exit(code=1) from exc
 
 
+def _layout_error_message(exc: BellmanLayoutError | ValueError) -> str:
+    return exc.message if isinstance(exc, BellmanLayoutError) else str(exc)
+
+
+def _resolve_project_option(root: Path, project: str | None) -> str | None:
+    if project is None:
+        return None
+    return layout.resolve_entity(root, project, expected_kind="project").name
+
+
 def _write_wbs_csv_report(
     path: Path | None,
     *,
@@ -542,14 +573,15 @@ def _write_wbs_csv_report(
 ) -> None:
     root, roadmap = _load_roadmap(path)
     try:
+        project_name = _resolve_project_option(root, project)
         if output is None:
-            write_wbs_csv(roadmap, sys.stdout, project_name=project)
+            write_wbs_csv(roadmap, sys.stdout, project_name=project_name)
             return
 
         out_path = output if output.is_absolute() else root / output
-        write_wbs_csv_file(roadmap, out_path, project_name=project)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
+        write_wbs_csv_file(roadmap, out_path, project_name=project_name)
+    except (ValueError, BellmanLayoutError) as exc:
+        typer.echo(_layout_error_message(exc), err=True)
         raise typer.Exit(code=1) from exc
 
     typer.echo(f"Wrote {out_path}")
@@ -560,11 +592,12 @@ def _write_wbs_tree_report(
     *,
     project: str | None,
 ) -> None:
-    _root_path, roadmap = _load_roadmap(path)
+    root, roadmap = _load_roadmap(path)
     try:
-        write_wbs_tree(roadmap, sys.stdout, project_name=project)
-    except ValueError as exc:
-        typer.echo(str(exc), err=True)
+        project_name = _resolve_project_option(root, project)
+        write_wbs_tree(roadmap, sys.stdout, project_name=project_name)
+    except (ValueError, BellmanLayoutError) as exc:
+        typer.echo(_layout_error_message(exc), err=True)
         raise typer.Exit(code=1) from exc
 
 
@@ -577,7 +610,7 @@ def report_wbs(
     ] = None,
     project: Annotated[
         str | None,
-        typer.Option("--project", help="Export a single project by name"),
+        typer.Option("--project", help=_PROJECT_ID_HELP),
     ] = None,
     output: Annotated[
         Path | None,
@@ -608,7 +641,7 @@ def report_wbs_csv(
     ] = None,
     project: Annotated[
         str | None,
-        typer.Option("--project", help="Export a single project by name"),
+        typer.Option("--project", help=_PROJECT_ID_HELP),
     ] = None,
     output: Annotated[
         Path | None,
@@ -642,7 +675,7 @@ def report_wbs_tree(
     ] = None,
     project: Annotated[
         str | None,
-        typer.Option("--project", help="Show a single project by name"),
+        typer.Option("--project", help=_PROJECT_ID_HELP),
     ] = None,
 ) -> None:
     """Print a work-package tree with PERT estimates to stdout."""
@@ -660,7 +693,13 @@ def _write_dependencies_report(
     *,
     entity: str | None,
 ) -> None:
-    _root_path, roadmap = _load_roadmap(path)
+    root, roadmap = _load_roadmap(path)
+    try:
+        if entity is not None:
+            entity = layout.resolve_entity_filter(root, entity)
+    except (BellmanLayoutError, ValueError) as exc:
+        typer.echo(_layout_error_message(exc), err=True)
+        raise typer.Exit(code=1) from exc
     write_dependencies_report(roadmap, sys.stdout, entity=entity)
 
 
@@ -668,7 +707,10 @@ def report_dependencies(
     entity: Annotated[
         str | None,
         typer.Argument(
-            help="Entity name (or project/slug); show predecessors and successors",
+            help=(
+                "Entity name, FQN, or path (or project/slug for a work package); "
+                "show predecessors and successors"
+            ),
         ),
     ] = None,
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,

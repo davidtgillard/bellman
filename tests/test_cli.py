@@ -232,7 +232,7 @@ def test_report_wbs_tree_value_error() -> None:
         ],
     )
     assert result.exit_code == 1
-    assert "project not found" in result.output
+    assert "no project named" in result.output
 
 
 def test_report_wbs_csv_unknown_project() -> None:
@@ -248,7 +248,7 @@ def test_report_wbs_csv_unknown_project() -> None:
         ],
     )
     assert result.exit_code == 1
-    assert "project not found" in result.output
+    assert "no project named" in result.output
 
 
 def test_rename_positionals_skips_flags() -> None:

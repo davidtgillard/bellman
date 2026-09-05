@@ -199,7 +199,7 @@ def test_promote_missing_exits_1(tmp_path: Path) -> None:
         ["promote", "missing-init", "--path", str(tmp_path)],
     )
     assert result.exit_code == 1
-    assert "not found" in result.output
+    assert "no initiative named" in result.output
 
 
 def test_promote_sync_failure_exits_1(tmp_path: Path) -> None:
@@ -269,7 +269,7 @@ def test_demote_missing_exits_1(tmp_path: Path) -> None:
         ["demote", "missing-proj", "--path", str(tmp_path)],
     )
     assert result.exit_code == 1
-    assert "not found" in result.output
+    assert "no project named" in result.output
 
 
 def test_demote_sync_failure_exits_1(tmp_path: Path) -> None:

@@ -59,3 +59,47 @@ def test_report_entity_predecessors_and_successors(tmp_path: Path) -> None:
     assert "Successors:" in text
     assert "(none)" in text.split("Predecessors:")[1].split("Successors:")[0]
     assert "alpha -> beta [FS, Mandatory]" in text.split("Successors:")[1]
+
+
+def test_report_entity_via_fqn_matches_name(tmp_path: Path) -> None:
+    _seed_roadmap(tmp_path)
+    roadmap = load(tmp_path)
+    by_name = StringIO()
+    by_fqn = StringIO()
+    write_dependencies_report(roadmap, by_name, entity="alpha")
+    write_dependencies_report(
+        roadmap,
+        by_fqn,
+        entity=layout.resolve_entity_filter(tmp_path, "initiatives/alpha"),
+    )
+    assert by_name.getvalue() == by_fqn.getvalue()
+
+
+def test_report_deps_cli_accepts_fqn_and_wp_id(tmp_path: Path) -> None:
+    from typer.testing import CliRunner
+
+    from bellman.cli import app
+
+    _seed_roadmap(tmp_path)
+    (tmp_path / ".fits").mkdir()
+    runner = CliRunner()
+    fqn = runner.invoke(
+        app,
+        ["report", "deps", "initiatives/alpha", "--path", str(tmp_path)],
+    )
+    assert fqn.exit_code == 0
+    assert "alpha -> beta [FS, Mandatory]" in fqn.stdout
+
+    wp = runner.invoke(
+        app,
+        ["report", "deps", "demo/second", "--path", str(tmp_path)],
+    )
+    assert wp.exit_code == 0
+    assert "first -> demo/second [FS, Mandatory]" in wp.stdout
+
+    missing = runner.invoke(
+        app,
+        ["report", "deps", "initiatives/missing", "--path", str(tmp_path)],
+    )
+    assert missing.exit_code == 1
+    assert "no entity" in missing.output

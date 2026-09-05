@@ -149,7 +149,7 @@ def test_report_wbs_cli_unknown_project(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 1
-    assert "project not found" in result.stderr
+    assert "no project named" in result.stderr
 
 
 def test_report_wbs_cli_writes_stdout_by_default() -> None:

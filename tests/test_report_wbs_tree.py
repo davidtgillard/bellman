@@ -142,6 +142,34 @@ def test_report_wbs_tree_cli() -> None:
     assert "wp-invoicing" in result.stdout
 
 
+def test_report_wbs_tree_cli_project_fqn() -> None:
+    by_name = runner.invoke(
+        app,
+        [
+            "report",
+            "wbs",
+            "tree",
+            "--project",
+            "billing-redesign",
+            str(EXAMPLES),
+        ],
+    )
+    by_fqn = runner.invoke(
+        app,
+        [
+            "report",
+            "wbs",
+            "tree",
+            "--project",
+            "projects/billing-redesign",
+            str(EXAMPLES),
+        ],
+    )
+    assert by_name.exit_code == 0
+    assert by_fqn.exit_code == 0
+    assert by_name.stdout == by_fqn.stdout
+
+
 def test_report_wbs_tree_cli_unknown_project() -> None:
     result = runner.invoke(
         app,
@@ -155,7 +183,7 @@ def test_report_wbs_tree_cli_unknown_project() -> None:
         ],
     )
     assert result.exit_code == 1
-    assert "project not found" in result.stderr
+    assert "no project named" in result.stderr
 
 
 def test_report_wbs_tree_cli_without_path(

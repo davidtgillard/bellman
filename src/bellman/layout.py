@@ -44,11 +44,35 @@ class DeletedEntity:
 
 @dataclass(frozen=True, slots=True)
 class RenamedEntity:
-    """Entity renamed by :func:`rename_entity`."""
+    """Entity renamed by :func:`rename_entity`.
+
+    Attributes:
+        kind: Entity kind string.
+        old_name: Previous natural name.
+        new_name: New natural name.
+        path: Filesystem path after the rename.
+    """
 
     kind: str
     old_name: str
     new_name: str
+    path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedEntity:
+    """Entity located by :func:`resolve_entity`.
+
+    Attributes:
+        kind: Entity kind (``initiative``, ``project``, ``milestone``,
+            ``goal``, or ``archived-initiative``).
+        name: Natural kebab-case name.
+        path: Filesystem path of the entity (markdown file or project
+            directory).
+    """
+
+    kind: str
+    name: str
     path: Path
 
 
@@ -286,22 +310,130 @@ def create_goal(root: Path, raw_name: str) -> Path:
 
 
 _LAYOUT_DIRS = (INITIATIVES_DIR, PROJECTS_DIR, MILESTONES_DIR, GOALS_DIR)
+_GRAPH_KIND_TO_DIR = {
+    "initiative": INITIATIVES_DIR,
+    "project": PROJECTS_DIR,
+    "milestone": MILESTONES_DIR,
+    "goal": GOALS_DIR,
+}
+_PATH_PREFIXES = frozenset(_LAYOUT_DIRS) | frozenset(_GRAPH_KIND_TO_DIR)
+
+
+def _normalize_ref_slashes(ref: str) -> str:
+    return ref.replace("\\", "/").strip()
+
+
+def _is_absolute_ref(normalized: str) -> bool:
+    return Path(normalized).is_absolute() or normalized.startswith("/")
 
 
 def _is_path_shaped_ref(ref: str) -> bool:
-    if ref.endswith(".md"):
+    """Return True when ``ref`` is a layout path, FQN, or markdown path.
+
+    A lone ``{name}.md`` (no directory) is a natural name, not a path.
+    Slash-separated work-package ids (``project/slug``) are not path-shaped
+    unless the first segment is a known type directory or graph kind.
+    """
+    normalized = _normalize_ref_slashes(ref)
+    if not normalized:
+        return False
+    if _is_absolute_ref(normalized):
         return True
-    if "/" in ref or "\\" in ref:
+    parts = [part for part in normalized.strip("/").split("/") if part and part != "."]
+    if len(parts) < 2:
+        return False
+    if parts[0] in _PATH_PREFIXES:
         return True
-    return any(ref.startswith(f"{d}/") for d in _LAYOUT_DIRS)
+    return normalized.endswith(".md")
+
+
+def _require_inside_root(root_resolved: Path, path: Path, ref: str, root: Path) -> Path:
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError as exc:
+        msg = f"entity path {ref!r} is outside roadmap at {root}"
+        raise BellmanLayoutError(msg) from exc
+    return resolved
+
+
+def _layout_parts_from_ref(root: Path, ref: str) -> tuple[tuple[str, ...], Path]:
+    normalized = _normalize_ref_slashes(ref)
+    if not normalized or normalized in {".", "./"}:
+        msg = f"invalid entity path {ref!r}"
+        raise BellmanLayoutError(msg)
+    if ".." in normalized.split("/"):
+        msg = f"invalid entity path {ref!r}"
+        raise BellmanLayoutError(msg)
+
+    root_resolved = root.resolve()
+    if _is_absolute_ref(normalized):
+        candidate = Path(normalized).resolve()
+        try:
+            rel = candidate.relative_to(root_resolved)
+        except ValueError as exc:
+            msg = f"entity path {ref!r} is outside roadmap at {root}"
+            raise BellmanLayoutError(msg) from exc
+        parts = tuple(part for part in rel.parts if part != ".")
+        if not parts:
+            msg = f"invalid entity path {ref!r}"
+            raise BellmanLayoutError(msg)
+        return parts, root_resolved
+
+    parts_list = [
+        part for part in normalized.strip("/").split("/") if part and part != "."
+    ]
+    if not parts_list:
+        msg = f"invalid entity path {ref!r}"
+        raise BellmanLayoutError(msg)
+    if parts_list[0] in _GRAPH_KIND_TO_DIR:
+        parts_list[0] = _GRAPH_KIND_TO_DIR[parts_list[0]]
+    return tuple(parts_list), root_resolved
+
+
+def _resolve_markdown_entity_path(
+    *,
+    root: Path,
+    root_resolved: Path,
+    ref: str,
+    kind: str,
+    layout_dir: str,
+    parts: tuple[str, ...],
+) -> tuple[str, Path]:
+    expected = f"{layout_dir}/{{name}} or {layout_dir}/{{name}}.md"
+    if len(parts) != 2:
+        msg = f"invalid {kind} path {ref!r}; expected {expected}"
+        raise BellmanLayoutError(msg)
+    filename = parts[1]
+    if kind == "initiative" and filename.endswith(ARCHIVED_SUFFIX):
+        path = root_resolved / layout_dir / filename
+        if not path.is_file():
+            msg = f"no entity at {ref!r} in roadmap at {root}"
+            raise BellmanLayoutError(msg)
+        path = _require_inside_root(root_resolved, path, ref, root)
+        return "archived-initiative", path
+    if filename.endswith(".md"):
+        path = root_resolved / layout_dir / filename
+    else:
+        path = root_resolved / layout_dir / f"{filename}.md"
+    if not path.is_file():
+        msg = f"no entity at {ref!r} in roadmap at {root}"
+        raise BellmanLayoutError(msg)
+    path = _require_inside_root(root_resolved, path, ref, root)
+    if kind == "initiative" and path.name.endswith(ARCHIVED_SUFFIX):
+        return "archived-initiative", path
+    return kind, path
 
 
 def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
-    """Locate an entity by layout-relative path. Returns (kind, path).
+    """Locate an entity by layout-relative path or FQN.
 
     Args:
         root: Roadmap root directory.
-        ref: Path relative to ``root`` (e.g. ``goals/foo.md``, ``projects/foo``).
+        ref: Path relative to ``root`` or an absolute path under ``root``.
+            Accepts folder paths (``projects/foo``), markdown paths
+            (``projects/foo/foo.md``, ``goals/foo.md``), layout FQNs
+            (``initiatives/foo``), and graph FQNs (``goal/foo``).
 
     Returns:
         Entity kind string and resolved filesystem path.
@@ -310,58 +442,35 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
         BellmanLayoutError: When the path is invalid, escapes the roadmap root,
             or does not match a known entity layout.
     """
-    normalized = ref.replace("\\", "/").strip("/")
-    if not normalized or ".." in normalized.split("/"):
-        msg = f"invalid entity path {ref!r}"
-        raise BellmanLayoutError(msg)
-
-    candidate = (root / normalized).resolve()
-    root_resolved = root.resolve()
-    try:
-        candidate.relative_to(root_resolved)
-    except ValueError as exc:
-        msg = f"entity path {ref!r} is outside roadmap at {root}"
-        raise BellmanLayoutError(msg) from exc
-
-    rel = candidate.relative_to(root_resolved)
-    parts = rel.parts
-    if not parts:
-        msg = f"invalid entity path {ref!r}"
-        raise BellmanLayoutError(msg)
-
+    parts, root_resolved = _layout_parts_from_ref(root, ref)
     top = parts[0]
     if top == GOALS_DIR:
-        if len(parts) != 2 or not parts[1].endswith(".md"):
-            msg = f"invalid goal path {ref!r}; expected goals/{{name}}.md"
-            raise BellmanLayoutError(msg)
-        path = root_resolved / rel
-        if not path.is_file():
-            msg = f"no entity at {ref!r} in roadmap at {root}"
-            raise BellmanLayoutError(msg)
-        return "goal", path
-
+        return _resolve_markdown_entity_path(
+            root=root,
+            root_resolved=root_resolved,
+            ref=ref,
+            kind="goal",
+            layout_dir=GOALS_DIR,
+            parts=parts,
+        )
     if top == MILESTONES_DIR:
-        if len(parts) != 2 or not parts[1].endswith(".md"):
-            msg = f"invalid milestone path {ref!r}; expected milestones/{{name}}.md"
-            raise BellmanLayoutError(msg)
-        path = root_resolved / rel
-        if not path.is_file():
-            msg = f"no entity at {ref!r} in roadmap at {root}"
-            raise BellmanLayoutError(msg)
-        return "milestone", path
-
+        return _resolve_markdown_entity_path(
+            root=root,
+            root_resolved=root_resolved,
+            ref=ref,
+            kind="milestone",
+            layout_dir=MILESTONES_DIR,
+            parts=parts,
+        )
     if top == INITIATIVES_DIR:
-        if len(parts) != 2 or not parts[1].endswith(".md"):
-            msg = f"invalid initiative path {ref!r}; expected initiatives/{{name}}.md"
-            raise BellmanLayoutError(msg)
-        path = root_resolved / rel
-        if not path.is_file():
-            msg = f"no entity at {ref!r} in roadmap at {root}"
-            raise BellmanLayoutError(msg)
-        if path.name.endswith(ARCHIVED_SUFFIX):
-            return "archived-initiative", path
-        return "initiative", path
-
+        return _resolve_markdown_entity_path(
+            root=root,
+            root_resolved=root_resolved,
+            ref=ref,
+            kind="initiative",
+            layout_dir=INITIATIVES_DIR,
+            parts=parts,
+        )
     if top == PROJECTS_DIR:
         if len(parts) >= 2 and parts[1].endswith(ARCHIVED_PROJECT_DIR_SUFFIX):
             msg = (
@@ -370,22 +479,13 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
             )
             raise BellmanLayoutError(msg)
         if len(parts) == 2 and not parts[1].endswith(".md"):
-            path = root_resolved / rel
+            path = root_resolved / PROJECTS_DIR / parts[1]
             if not path.is_dir():
                 msg = f"no entity at {ref!r} in roadmap at {root}"
                 raise BellmanLayoutError(msg)
-            return "project", path
-        if len(parts) == 1:
-            path = root_resolved / rel
-            if not path.is_dir():
-                msg = f"no entity at {ref!r} in roadmap at {root}"
-                raise BellmanLayoutError(msg)
+            path = _require_inside_root(root_resolved, path, ref, root)
             return "project", path
         if len(parts) == 3 and parts[2].endswith(".md"):
-            path = root_resolved / rel
-            if not path.is_file():
-                msg = f"no entity at {ref!r} in roadmap at {root}"
-                raise BellmanLayoutError(msg)
             project_name = parts[1]
             if parts[2] != f"{project_name}.md":
                 msg = (
@@ -393,6 +493,11 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
                     "expected projects/{name}/{name}.md"
                 )
                 raise BellmanLayoutError(msg)
+            path = root_resolved / PROJECTS_DIR / project_name / parts[2]
+            if not path.is_file():
+                msg = f"no entity at {ref!r} in roadmap at {root}"
+                raise BellmanLayoutError(msg)
+            path = _require_inside_root(root_resolved, path, ref, root)
             return "project", path.parent
         msg = (
             f"invalid project path {ref!r}; "
@@ -467,6 +572,79 @@ def find_entity_by_kind(root: Path, kind: str, name: str) -> tuple[str, Path]:
         return "goal", path
     msg = f"no goal named {name!r} in roadmap at {root}"
     raise BellmanLayoutError(msg)
+
+
+def resolve_entity(
+    root: Path,
+    ref: str,
+    *,
+    expected_kind: str | None = None,
+) -> ResolvedEntity:
+    """Locate an entity by natural name, layout FQN, or filesystem path.
+
+    Args:
+        root: Roadmap root directory.
+        ref: Natural name (kebab-case, optional ``.md`` suffix), layout FQN
+            (``projects/foo``), graph FQN (``project/foo``), folder path, or
+            main markdown path.
+        expected_kind: When set, require this kind. Bare names are looked up
+            in this kind only; path or FQN refs that resolve to another kind
+            raise :class:`BellmanLayoutError`.
+
+    Returns:
+        Resolved kind, natural name, and filesystem path.
+
+    Raises:
+        BellmanLayoutError: When the entity cannot be resolved or the kind
+            does not match ``expected_kind``.
+        ValueError: When a bare ``ref`` is not valid kebab-case.
+    """
+    if expected_kind is not None and expected_kind not in _RENAMEABLE_KINDS:
+        kinds = ", ".join(sorted(_RENAMEABLE_KINDS))
+        msg = f"unknown entity kind {expected_kind!r}; expected one of: {kinds}"
+        raise BellmanLayoutError(msg)
+
+    if _is_path_shaped_ref(ref):
+        kind, path = resolve_entity_path(root, ref)
+    elif expected_kind is not None:
+        name = normalize_entity_name(ref)
+        kind, path = find_entity_by_kind(root, expected_kind, name)
+    else:
+        name = normalize_entity_name(ref)
+        kind, path = find_entity(root, name)
+
+    name = _entity_name_from_path(kind, path)
+    if expected_kind is not None and kind != expected_kind:
+        msg = f"cannot use {kind} {name!r} as {expected_kind}"
+        raise BellmanLayoutError(msg)
+    return ResolvedEntity(kind=kind, name=name, path=path)
+
+
+def resolve_entity_filter(root: Path, ref: str) -> str:
+    """Resolve a report entity filter to a natural name or work-package id.
+
+    Layout names, FQNs, and paths resolve to the entity natural name. Other
+    slash-separated refs (``project/slug``) are returned unchanged.
+
+    Args:
+        root: Roadmap root directory.
+        ref: CLI entity filter string.
+
+    Returns:
+        Natural entity name, or ``ref`` when it is a work-package id.
+
+    Raises:
+        BellmanLayoutError: When ``ref`` looks like an entity id but cannot
+            be resolved.
+        ValueError: When a bare name is not valid kebab-case.
+    """
+    if _is_path_shaped_ref(ref):
+        return resolve_entity(root, ref).name
+    try:
+        normalize_entity_name(ref)
+    except ValueError:
+        return ref
+    return resolve_entity(root, ref).name
 
 
 def _destination_exists(root: Path, kind: str, name: str) -> bool:
@@ -620,7 +798,8 @@ def rename_entity(
 
     Args:
         root: Roadmap root directory.
-        old_ref: Natural entity name or layout-relative path (e.g. ``goals/foo.md``).
+        old_ref: Natural name, layout FQN, or layout-relative path
+            (e.g. ``goals/foo.md``, ``projects/foo``).
         raw_new_name: New natural name (kebab-case).
         kind: When set, resolve ``old_ref`` as that entity kind only.
 
@@ -633,15 +812,10 @@ def rename_entity(
         ValueError: When ``raw_new_name`` is not valid kebab-case.
     """
     new_name = normalize_entity_name(raw_new_name)
-    if kind is None:
-        if _is_path_shaped_ref(old_ref):
-            resolved_kind, path = resolve_entity_path(root, old_ref)
-        else:
-            resolved_kind, path = find_entity(root, old_ref)
-    else:
-        old_name = normalize_entity_name(old_ref)
-        resolved_kind, path = find_entity_by_kind(root, kind, old_name)
-    old_name = _entity_name_from_path(resolved_kind, path)
+    resolved = resolve_entity(root, old_ref, expected_kind=kind)
+    resolved_kind = resolved.kind
+    path = resolved.path
+    old_name = resolved.name
     if old_name == new_name:
         msg = f"entity already named {new_name!r}"
         raise BellmanLayoutError(msg)
@@ -680,7 +854,8 @@ def delete_entity(root: Path, ref: str, *, force: bool = False) -> DeletedEntity
 
     Args:
         root: Roadmap root directory.
-        ref: Natural entity name or layout-relative path (e.g. ``goals/foo.md``).
+        ref: Natural name, layout FQN, or layout-relative path
+            (e.g. ``goals/foo.md``, ``projects/foo``).
         force: Reserved for future dependency checks.
 
     Returns:
@@ -688,13 +863,13 @@ def delete_entity(root: Path, ref: str, *, force: bool = False) -> DeletedEntity
 
     Raises:
         BellmanLayoutError: When the entity cannot be resolved or deleted.
+        ValueError: When a bare ``ref`` is not valid kebab-case.
     """
     _ = force  # reserved for dependency checks in validate layer
-    if _is_path_shaped_ref(ref):
-        kind, path = resolve_entity_path(root, ref)
-    else:
-        kind, path = find_entity(root, ref)
-    name = _entity_name_from_path(kind, path)
+    resolved = resolve_entity(root, ref)
+    kind = resolved.kind
+    path = resolved.path
+    name = resolved.name
     if kind == "project":
         shutil.rmtree(path)
     else:
@@ -731,21 +906,20 @@ def promote_initiative(root: Path, raw_name: str) -> Path:
 
     Args:
         root: Roadmap root directory.
-        raw_name: Initiative natural name (kebab-case).
+        raw_name: Initiative natural name, FQN, or layout path.
 
     Returns:
         Path of the live project directory.
 
     Raises:
         BellmanLayoutError: When the initiative is missing, a live project
-            already exists, or the promote cannot be completed.
-        ValueError: When ``raw_name`` is not valid kebab-case.
+            already exists, ``raw_name`` resolves to a non-initiative, or
+            the promote cannot be completed.
+        ValueError: When a bare ``raw_name`` is not valid kebab-case.
     """
-    name = normalize_entity_name(raw_name)
-    src = initiative_path(root, name)
-    if not src.exists():
-        msg = f"initiative not found: {src}"
-        raise BellmanLayoutError(msg)
+    resolved = resolve_entity(root, raw_name, expected_kind="initiative")
+    name = resolved.name
+    src = resolved.path
     pdir = project_dir(root, name)
     if pdir.exists():
         msg = f"project already exists: {name}"
@@ -780,22 +954,21 @@ def demote_project(root: Path, raw_name: str) -> Path:
 
     Args:
         root: Roadmap root directory.
-        raw_name: Project natural name (kebab-case).
+        raw_name: Project natural name, FQN, or layout path.
 
     Returns:
         Path of the live initiative markdown file.
 
     Raises:
         BellmanLayoutError: When the project is missing, a live initiative
-            already exists, an archived project folder already exists, or
-            the demote cannot be completed.
-        ValueError: When ``raw_name`` is not valid kebab-case.
+            already exists, an archived project folder already exists,
+            ``raw_name`` resolves to a non-project, or the demote cannot be
+            completed.
+        ValueError: When a bare ``raw_name`` is not valid kebab-case.
     """
-    name = normalize_entity_name(raw_name)
-    pdir = project_dir(root, name)
-    if not pdir.is_dir():
-        msg = f"project not found: {pdir}"
-        raise BellmanLayoutError(msg)
+    resolved = resolve_entity(root, raw_name, expected_kind="project")
+    name = resolved.name
+    pdir = resolved.path
     dest = initiative_path(root, name)
     if dest.exists():
         msg = f"initiative already exists: {name}"
