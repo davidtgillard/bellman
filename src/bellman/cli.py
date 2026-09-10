@@ -30,6 +30,7 @@ from bellman.graph.sync import (
 from bellman.model import Roadmap
 from bellman.plugin.cli import register_plugin_command
 from bellman.report.dependencies import write_dependencies_report
+from bellman.report.status import compute_roadmap_status, format_status_report
 from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
 from bellman.report.wbs_tree import write_wbs_tree
 from bellman.roadmap import load, load_for_validation
@@ -721,6 +722,29 @@ def report_dependencies(
 
 report_app.command("dependencies")(report_dependencies)
 report_app.command("deps")(report_dependencies)
+
+
+@app.command()
+def status(
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Roadmap root directory (default: cwd)"),
+    ] = None,
+    registry: Annotated[
+        bool,
+        typer.Option(
+            "--registry/--no-registry",
+            help="Compare the pyfits registry to git markdown",
+        ),
+    ] = True,
+) -> None:
+    """Report entity inventory, markdown health, and registry alignment."""
+    root = _root(path)
+    result = compute_roadmap_status(root, registry=registry)
+    if isinstance(result, Err):
+        typer.echo(f"Status failed: {result.err_value}", err=True)
+        raise typer.Exit(code=1)
+    format_status_report(result.ok_value, sys.stdout)
 
 
 @app.command()

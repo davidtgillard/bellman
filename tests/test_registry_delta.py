@@ -10,7 +10,7 @@ from pyfits.result import Ok
 
 from bellman import layout
 from bellman.graph.delta import compute_registry_delta
-from bellman.graph.desired import desired_links, desired_nodes
+from bellman.graph.desired import DesiredNode, desired_links, desired_nodes
 from bellman.graph.history import GraphHistory, InstanceRecord
 from bellman.graph.identity import InstanceIndex
 from bellman.roadmap import load
@@ -59,6 +59,11 @@ def test_compute_registry_delta_reports_missing_goal(tmp_path: Path) -> None:
     delta = result.ok_value
     assert delta.missing_nodes == ("goal manual-goal",)
     assert delta.has_differences
+    assert delta.missing_node_ids == frozenset(
+        {DesiredNode("goal", "goal/manual-goal")}
+    )
+    assert delta.desired_node_count == 1
+    assert delta.actual_node_count == 0
 
 
 def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
@@ -93,6 +98,9 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
     delta = result.ok_value
     assert delta.extra_nodes == ("goal orphan-goal",)
     assert delta.has_differences
+    assert any(node.type_name == "goal" for node in delta.extra_node_ids)
+    assert delta.actual_node_count == 1
+    assert delta.desired_node_count == 0
 
 
 def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> None:

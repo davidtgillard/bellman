@@ -82,12 +82,12 @@ All natural names use **lowercase-kebab-case** (e.g. `billing-redesign`).
 
 Run `bellman init` once at the roadmap root before other commands. It creates the markdown directories and the pyfits repository (`.fits/`, `nodes/`, `links/`). Graph sync commands do not create that scaffolding.
 
-When you run a command from a subdirectory, bellman walks up to the nearest ancestor containing `.fits/`, stopping at the git root (the directory containing `.git`) so it does not search outside the work tree. `bellman init` always targets the path you give (or cwd) and does not walk upward.
+`init`, `validate`, `status`, and `sync` take an optional path argument (default: the current working directory). When you run a command from a subdirectory, bellman walks up to the nearest ancestor containing `.fits/`, stopping at the git root (the directory containing `.git`) so it does not search outside the work tree. `bellman init` always targets the path you give (or cwd) and does not walk upward.
 
 ## Commands
 
 ```bash
-bellman init .
+bellman init
 bellman create initiative explore-ml-ranking
 bellman create project billing-redesign
 bellman create milestone ga-release
@@ -96,9 +96,11 @@ bellman promote billing-redesign   # after creating as initiative
 bellman promote initiatives/billing-redesign
 bellman demote billing-redesign    # park the project folder; restore the initiative
 bellman demote projects/billing-redesign/billing-redesign.md
-bellman validate .
-bellman validate --no-registry .
-bellman sync .
+bellman validate
+bellman validate --no-registry
+bellman status
+bellman status --no-registry
+bellman sync
 bellman version
 bellman update --check
 bellman delete my-goal
@@ -115,7 +117,7 @@ bellman report deps beta                             # predecessors/successors o
 bellman report deps initiatives/beta
 ```
 
-`validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
+`validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `status` inventories every entity with markdown health and registry alignment without modifying files (exit 0 unless the command itself fails). `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
 
 `create`, `delete`, `rename`, `promote`, and `demote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
 

@@ -26,13 +26,33 @@ from bellman.model import Roadmap
 
 @dataclass(frozen=True, slots=True)
 class RegistryDelta:
-    """Differences between git markdown and the pyfits registry."""
+    """Differences between git markdown and the pyfits registry.
+
+    Attributes:
+        missing_nodes: Human-readable lines for nodes in git but not registry.
+        extra_nodes: Human-readable lines for nodes in registry but not git.
+        missing_links: Human-readable lines for links in git but not registry.
+        extra_links: Human-readable lines for links in registry but not git.
+        needs_id_migration: True when the registry still uses legacy flat node IDs.
+        missing_node_ids: Structured nodes present in git but missing from registry.
+        extra_node_ids: Structured nodes present in registry but missing from git.
+        desired_node_count: Count of nodes implied by markdown.
+        actual_node_count: Count of bellman nodes in the registry.
+        desired_link_count: Count of links implied by markdown.
+        actual_link_count: Count of bellman links in the registry.
+    """
 
     missing_nodes: tuple[str, ...]
     extra_nodes: tuple[str, ...]
     missing_links: tuple[str, ...]
     extra_links: tuple[str, ...]
     needs_id_migration: bool = False
+    missing_node_ids: frozenset[DesiredNode] = frozenset()
+    extra_node_ids: frozenset[DesiredNode] = frozenset()
+    desired_node_count: int = 0
+    actual_node_count: int = 0
+    desired_link_count: int = 0
+    actual_link_count: int = 0
 
     @property
     def has_differences(self) -> bool:
@@ -155,18 +175,15 @@ def compute_registry_delta(
         return actual_links_result
     actual_link_set = actual_links_result.ok_value
 
-    missing_nodes = tuple(
-        sorted(_format_node(node) for node in desired_node_set - actual_node_set)
-    )
-    extra_nodes = tuple(
-        sorted(_format_node(node) for node in actual_node_set - desired_node_set)
-    )
-    missing_links = tuple(
-        sorted(_format_link(link) for link in desired_link_set - actual_link_set)
-    )
-    extra_links = tuple(
-        sorted(_format_link(link) for link in actual_link_set - desired_link_set)
-    )
+    missing_node_set = desired_node_set - actual_node_set
+    extra_node_set = actual_node_set - desired_node_set
+    missing_link_set = desired_link_set - actual_link_set
+    extra_link_set = actual_link_set - desired_link_set
+
+    missing_nodes = tuple(sorted(_format_node(node) for node in missing_node_set))
+    extra_nodes = tuple(sorted(_format_node(node) for node in extra_node_set))
+    missing_links = tuple(sorted(_format_link(link) for link in missing_link_set))
+    extra_links = tuple(sorted(_format_link(link) for link in extra_link_set))
 
     return Ok(
         RegistryDelta(
@@ -177,5 +194,11 @@ def compute_registry_delta(
             needs_id_migration=registry_needs_id_migration(
                 actual_node_set, desired_node_set
             ),
+            missing_node_ids=frozenset(missing_node_set),
+            extra_node_ids=frozenset(extra_node_set),
+            desired_node_count=len(desired_node_set),
+            actual_node_count=len(actual_node_set),
+            desired_link_count=len(desired_link_set),
+            actual_link_count=len(actual_link_set),
         )
     )
