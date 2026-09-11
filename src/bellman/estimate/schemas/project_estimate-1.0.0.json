@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidtgillard/bellman/schemas/project-estimate/1.0.0.json",
+  "title": "Bellman project estimate output",
+  "description": "Machine-readable summary from `bellman estimate --json`.",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "unit",
+    "trials",
+    "seed",
+    "num_people",
+    "parallel_fraction",
+    "leaf_count",
+    "method",
+    "scheduler",
+    "effort",
+    "duration"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Semantic version of this JSON document schema."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project natural name."
+    },
+    "unit": {
+      "type": "string",
+      "enum": ["h", "d", "w"],
+      "description": "Shared duration unit of leaf estimates."
+    },
+    "trials": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of Monte Carlo trials."
+    },
+    "seed": {
+      "type": ["integer", "null"],
+      "description": "RNG seed, or null when unspecified."
+    },
+    "num_people": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Staff count used for duration."
+    },
+    "parallel_fraction": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Amdahl parallelizable fraction p."
+    },
+    "leaf_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of estimated leaf work packages."
+    },
+    "method": {
+      "type": "string",
+      "const": "amdahl-cpm"
+    },
+    "scheduler": {
+      "type": "string",
+      "const": "list-scheduling"
+    },
+    "effort": {
+      "$ref": "#/$defs/summary_stats"
+    },
+    "duration": {
+      "$ref": "#/$defs/summary_stats"
+    }
+  },
+  "$defs": {
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["low", "high"],
+      "properties": {
+        "low": { "type": "number" },
+        "high": { "type": "number" }
+      }
+    },
+    "summary_stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean", "median", "intervals"],
+      "properties": {
+        "mean": { "type": "number" },
+        "median": { "type": "number" },
+        "intervals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["68", "95", "99.7"],
+          "properties": {
+            "68": { "$ref": "#/$defs/interval" },
+            "95": { "$ref": "#/$defs/interval" },
+            "99.7": { "$ref": "#/$defs/interval" }
+          }
+        }
+      }
+    }
+  }
+}

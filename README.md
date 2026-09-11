@@ -115,6 +115,8 @@ bellman report wbs tree --project projects/billing-redesign
 bellman report dependencies                          # all precedence edges
 bellman report deps beta                             # predecessors/successors of beta
 bellman report deps initiatives/beta
+bellman estimate billing-redesign                    # Monte Carlo effort and duration
+bellman estimate billing-redesign --json --seed 1 --num-people 2
 ```
 
 `validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `status` inventories every entity with markdown health and registry alignment without modifying files (exit 0 unless the command itself fails). `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
@@ -150,6 +152,18 @@ dependencies:
 Relation is one of `FF`, `FS`, `SF`, `SS`. Hardness is `Mandatory`, `Discretionary`, or `Optional`.
 
 Use `bellman report dependencies` (alias `deps`) to list all edges, or pass an entity name / `project/slug` to see what it depends on and what depends on it.
+
+## Project estimates
+
+`bellman estimate <project>` samples each leaf work package from a Beta-PERT distribution and reports two summaries:
+
+- **Effort** is work content: the sum of sampled leaf durations. That total does not grow with `--num-people`. Amdahl does not add coordination tasks to the WBS; it says only a fraction `p` of this work can run in parallel.
+- **Duration** is calendar time: the larger of a staffed CPM list-schedule (FS forbids overlap; FF/SS/SF are start/finish constraints; unlinked leaves share `--num-people`) and Amdahl's law `effort * ((1 - p) + p / N)` with `--parallel-fraction` `p` (default 0.70) and `--num-people` `N` (default 1).
+
+The parallelization *cost* shows up on the clock, not in effort. The serial remainder `(1 - p)` still takes `(1 - p) * effort` of calendar time no matter how many people you add, so extra staff sit through that remainder (or spend it on coordination). Staffed cost is therefore about `N * duration`, which is larger than effort when `N > 1` and `p < 1`. Example: `p = 0.70`, `N = 2` gives duration `0.65 * effort` and staffed cost `1.3 * effort`.
+
+With the defaults (`N = 1`), duration equals effort. Use `--json` for a machine-readable document (schema version 1.0.0). `--seed` makes trials reproducible.
+
 ## Plugins
 
 Repo-local Python plugins live under `plugin/{name}/` in the roadmap root. Each plugin exports a `PLUGIN` object (`BellmanPlugin` from `bellman.plugin`). Plugins require a **Python install** of bellman (`uv run bellman` or `pip install`); the standalone PyInstaller binary cannot load arbitrary repo Python.

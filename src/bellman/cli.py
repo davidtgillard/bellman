@@ -13,6 +13,14 @@ from typer.core import TyperGroup
 from bellman import layout
 from bellman._version import version_string
 from bellman.errors import BellmanLayoutError
+from bellman.estimate import (
+    DEFAULT_NUM_PEOPLE,
+    DEFAULT_PARALLEL_FRACTION,
+    DEFAULT_TRIALS,
+    estimate_project,
+    format_estimate_json,
+    format_estimate_text,
+)
 from bellman.graph.delta import (
     RegistryDelta,
     RegistryDeltaError,
@@ -722,6 +730,80 @@ def report_dependencies(
 
 report_app.command("dependencies")(report_dependencies)
 report_app.command("deps")(report_dependencies)
+
+
+@app.command()
+def estimate(
+    project: Annotated[str, typer.Argument(help=_PROJECT_ID_HELP)],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Write JSON instead of a plaintext summary"),
+    ] = False,
+    trials: Annotated[
+        int,
+        typer.Option("--trials", help="Monte Carlo trial count"),
+    ] = DEFAULT_TRIALS,
+    seed: Annotated[
+        int | None,
+        typer.Option("--seed", help="RNG seed for reproducible trials"),
+    ] = None,
+    num_people: Annotated[
+        int,
+        typer.Option("--num-people", help="People available to work in parallel"),
+    ] = DEFAULT_NUM_PEOPLE,
+    parallel_fraction: Annotated[
+        float,
+        typer.Option(
+            "--parallel-fraction",
+            help="Amdahl parallelizable fraction in [0, 1] (default 0.70)",
+        ),
+    ] = DEFAULT_PARALLEL_FRACTION,
+) -> None:
+    """Estimate project effort and duration with Monte Carlo simulation.
+
+    Args:
+        project: Project name, FQN, or layout path.
+        path: Roadmap root, or ``None`` to discover from the current directory.
+        as_json: When True, write JSON instead of a plaintext summary.
+        trials: Monte Carlo trial count.
+        seed: Optional RNG seed for reproducible trials.
+        num_people: People available to work in parallel.
+        parallel_fraction: Amdahl parallelizable fraction in ``[0, 1]``.
+
+    Raises:
+        typer.Exit: When the roadmap cannot be loaded or the project cannot
+            be estimated.
+    """
+    root = _root(path)
+    try:
+        roadmap = load(root)
+        project_name = layout.resolve_entity(
+            root,
+            project,
+            expected_kind="project",
+        ).name
+        loaded = roadmap.project_by_name(project_name)
+        if loaded is None:
+            msg = f"project not found: {project_name!r}"
+            raise ValueError(msg)
+        result = estimate_project(
+            loaded,
+            trials=trials,
+            seed=seed,
+            num_people=num_people,
+            parallel_fraction=parallel_fraction,
+        )
+    except OSError as exc:
+        typer.echo(f"load error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except (ValueError, BellmanLayoutError) as exc:
+        typer.echo(_layout_error_message(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    if as_json:
+        typer.echo(format_estimate_json(result), nl=False)
+        return
+    typer.echo(format_estimate_text(result), nl=False)
 
 
 @app.command()
