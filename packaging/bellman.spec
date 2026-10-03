@@ -4,11 +4,20 @@
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 root = Path(SPECPATH).resolve().parent
 src = root / "src"
+
+# Shipped JSON Schema documents are read at runtime (``bellman validate`` loads
+# the attribute-definition schema), and jsonschema needs its metaschema data.
+datas: list[tuple[str, str]] = [
+    *collect_data_files("bellman.attributes"),
+    *collect_data_files("bellman.estimate"),
+    *collect_data_files("jsonschema"),
+    *collect_data_files("jsonschema_specifications"),
+]
 
 libfits_path = os.environ.get("LIBFITS_PATH", "")
 binaries: list[tuple[str, str]] = []
@@ -19,10 +28,13 @@ a = Analysis(
     [str(src / "bellman" / "__main__.py")],
     pathex=[str(src)],
     binaries=binaries,
-    datas=[],
+    datas=datas,
     hiddenimports=[
         "bellman",
         "bellman.cli",
+        "bellman.attributes",
+        "bellman.attributes.schema",
+        "bellman.validators",
         "bellman._version",
         "bellman._build_version",
         "bellman.update",
@@ -36,6 +48,8 @@ a = Analysis(
         "bellman.update.state",
         "pyfits",
         "pyfits._native",
+        *collect_submodules("jsonschema"),
+        *collect_submodules("jsonschema_specifications"),
         "semver",
         "typer",
         "click",

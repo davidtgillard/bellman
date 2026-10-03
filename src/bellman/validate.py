@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
+from bellman.attributes.check import check_attributes
+from bellman.attributes.entities import work_package_path
 from bellman.errors import BellmanError, BellmanWarning
 from bellman.graph.desired import resolve_entity_ref
 from bellman.model import (
@@ -246,6 +248,8 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
                 BellmanError(goal.path, "goal missing content beneath header")
             )
 
+    errors.extend(check_attributes(roadmap))
+
     return ValidationResult(
         errors=tuple(errors),
         warnings=tuple(warnings),
@@ -254,7 +258,7 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
 
 def layout_wp_path(roadmap: Roadmap, project_name: str, slug: str) -> str:
     """Best-effort path for error reporting."""
-    return f"{roadmap.root}/projects/{project_name}/work-packages.yaml ({slug})"
+    return work_package_path(roadmap.root, project_name, slug)
 
 
 def _normalize_wp_ref(ref: str, project_name: str) -> str:

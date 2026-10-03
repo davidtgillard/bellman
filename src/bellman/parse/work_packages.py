@@ -18,6 +18,7 @@ from bellman.model import (
     WorkPackage,
 )
 from bellman.naming import slugify, validate_kebab
+from bellman.parse.classifications import parse_classifications_yaml
 
 _DEPENDENCY_RE = re.compile(
     r"^\s*(?P<predecessor>\S+)\s+"
@@ -245,6 +246,11 @@ def _parse_wp_node(
         slug,
         project_name=project_name,
     )
+    classifications = parse_classifications_yaml(
+        raw.get("classifications"),
+        path=path,
+        owner=slug,
+    )
     return WorkPackage(
         slug=slug,
         title=title,
@@ -253,6 +259,7 @@ def _parse_wp_node(
         estimate=estimate,
         sub_packages=sub_packages,
         dependencies=dependencies,
+        classifications=classifications,
     )
 
 

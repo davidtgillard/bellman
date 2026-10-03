@@ -18,3 +18,8 @@ End-to-end redesign of invoicing and payment flows.
 - All regions on new stack
 
 ## Dependencies
+
+## Classifications
+
+- priority: P1
+- program@1.0: platform-v2 [allocation: 0.5]

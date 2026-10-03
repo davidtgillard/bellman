@@ -29,7 +29,8 @@ from bellman.graph.desired import (
 )
 from bellman.model import Roadmap
 from bellman.roadmap import load_for_validation
-from bellman.validate import ValidationResult, layout_wp_path, validate_roadmap
+from bellman.validate import ValidationResult, layout_wp_path
+from bellman.validators import validate_roadmap_full
 
 EntityKind = Literal[
     "initiative",
@@ -114,12 +115,15 @@ def compute_roadmap_status(
     root: Path,
     *,
     registry: bool = True,
+    require_validators: bool = False,
 ) -> Result[RoadmapStatus, str]:
     """Compute a read-only status inventory for ``root``.
 
     Args:
         root: Roadmap root directory.
         registry: When True, compare markdown to the pyfits registry.
+        require_validators: When True, custom validators that cannot run in
+            this build are reported as errors instead of warnings.
 
     Returns:
         ``Ok(RoadmapStatus)`` with entity inventory and optional registry delta.
@@ -130,7 +134,9 @@ def compute_roadmap_status(
     """
     load_result = load_for_validation(root)
     roadmap = load_result.roadmap
-    validation = validate_roadmap(roadmap)
+    validation = validate_roadmap_full(
+        root, roadmap, require_validators=require_validators
+    )
     combined = ValidationResult(
         errors=load_result.errors + validation.errors,
         warnings=validation.warnings,

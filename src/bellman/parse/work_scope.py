@@ -8,6 +8,10 @@ from typing import Literal, overload
 from bellman.model import Initiative, Project, WorkPackage, WorkScope
 from bellman.naming import normalize_entity_name
 from bellman.parse._sections import section_by_title, split_sections
+from bellman.parse.classifications import (
+    CLASSIFICATIONS_TITLE,
+    parse_classifications_section,
+)
 from bellman.parse.dependencies import parse_dependencies_section
 from bellman.parse.work_packages import parse_work_packages
 
@@ -65,6 +69,13 @@ def parse_work_scope(
     dep_body = deps_sec.body if deps_sec is not None else ""
     dependencies = tuple(parse_dependencies_section(dep_body, successor=entity_name))
 
+    classifications_sec = section_by_title(sections, CLASSIFICATIONS_TITLE)
+    classifications = (
+        parse_classifications_section(classifications_sec.body)
+        if classifications_sec is not None
+        else ()
+    )
+
     base = WorkScope(
         name=entity_name,
         title=title,
@@ -73,6 +84,7 @@ def parse_work_scope(
         motivation=motivation,
         detailed_description=detailed,
         dependencies=dependencies,
+        classifications=classifications,
     )
 
     if not is_project:
@@ -84,6 +96,7 @@ def parse_work_scope(
             motivation=base.motivation,
             detailed_description=base.detailed_description,
             dependencies=base.dependencies,
+            classifications=base.classifications,
         )
 
     criteria = ""
@@ -117,6 +130,7 @@ def parse_work_scope(
         motivation=base.motivation,
         detailed_description=detailed,
         dependencies=base.dependencies,
+        classifications=base.classifications,
         criteria_for_success=criteria,
         work_packages=packages,
     )

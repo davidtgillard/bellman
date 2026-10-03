@@ -14,6 +14,8 @@ INITIATIVES_DIR = "initiatives"
 PROJECTS_DIR = "projects"
 MILESTONES_DIR = "milestones"
 GOALS_DIR = "goals"
+ATTRIBUTES_DIR = "attributes"
+"""Directory holding ``{name}.jsonc`` attribute definition files."""
 ARCHIVED_SUFFIX = ".archived.md"
 ARCHIVED_PROJECT_DIR_SUFFIX = ".archived"
 """Directory suffix for a project folder parked by :func:`demote_project`."""
@@ -177,7 +179,13 @@ def discover_roadmap_root(path: Path | None = None) -> Path:
 
 def ensure_roadmap_dirs(root: Path) -> None:
     """Create standard roadmap directories."""
-    for name in (INITIATIVES_DIR, PROJECTS_DIR, MILESTONES_DIR, GOALS_DIR):
+    for name in (
+        INITIATIVES_DIR,
+        PROJECTS_DIR,
+        MILESTONES_DIR,
+        GOALS_DIR,
+        ATTRIBUTES_DIR,
+    ):
         (root / name).mkdir(parents=True, exist_ok=True)
 
 

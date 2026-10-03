@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/davidtgillard/bellman/schemas/attribute-definition/1.0.json",
+  "title": "Bellman attribute definition",
+  "description": "One attributes/{name}.jsonc file describing an attribute that can be assigned to roadmap entities.",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "applies_to", "cardinality"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema for editor support."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "Attribute name in lowercase kebab-case. Must equal the file name without .jsonc."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "Contract version x.y. Increment y for compatible changes; increment x and reset y for breaking ones."
+    },
+    "description": {
+      "type": "string",
+      "description": "One-line explanation for readers of the file."
+    },
+    "applies_to": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["initiative", "project", "work_package", "milestone", "goal"]
+      },
+      "description": "Entity kinds that may carry this attribute."
+    },
+    "cardinality": {
+      "enum": ["one", "many"],
+      "description": "Maximum assignments per entity."
+    },
+    "required": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, every entity whose kind is in applies_to must be assigned this attribute."
+    },
+    "values": {
+      "description": "Legal values: a list of tokens (plain set) or an object keyed by token (keyed metadata).",
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/token" }
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/token" },
+          "additionalProperties": { "type": "object" }
+        }
+      ]
+    },
+    "value_schema": {
+      "type": ["object", "boolean"],
+      "description": "JSON Schema for each keyed entry under values, or for open assignment values when values is omitted."
+    },
+    "assignment_schema": {
+      "type": ["object", "boolean"],
+      "description": "JSON Schema for the bracketed data written on an assignment."
+    }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Value or key: a letter or digit first, then letters, digits, '.', '_' or '-'."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["values"],
+        "properties": { "values": { "type": "array" } }
+      },
+      "then": {
+        "not": { "required": ["value_schema"] }
+      }
+    },
+    {
+      "if": {
+        "not": { "required": ["values"] }
+      },
+      "then": {
+        "required": ["value_schema"]
+      }
+    }
+  ]
+}

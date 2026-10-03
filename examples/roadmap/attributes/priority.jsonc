@@ -1,0 +1,16 @@
+{
+  // Attribute name; matches priority.jsonc.
+  "name": "priority",
+  // Contract version.
+  "version": "1.0",
+  // One-line explanation for people reading the file.
+  "description": "Delivery priority, P0 being the most urgent.",
+  // Only projects and initiatives are prioritized.
+  "applies_to": ["initiative", "project"],
+  // At most one priority per entity.
+  "cardinality": "one",
+  // Every initiative and project must have a priority.
+  "required": true,
+  // Allowed values, in order. No data attached, so no value_schema.
+  "values": ["P0", "P1", "P2", "P3"]
+}

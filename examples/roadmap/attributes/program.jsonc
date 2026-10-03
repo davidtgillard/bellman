@@ -1,0 +1,61 @@
+{
+  // Optional. Points editors at the definition schema for completion and checking.
+  "$schema": "https://github.com/davidtgillard/bellman/schemas/attribute-definition/1.0.json",
+  // Required. The attribute's name. Must match this file's name (program.jsonc).
+  "name": "program",
+  // Required. This attribute's contract version, x.y. Bump y for a compatible change
+  // (for example, adding a program). Bump x for a breaking one (for example, removing one).
+  "version": "1.0",
+  // Optional. One-line explanation for people reading the file.
+  "description": "Large work scope that projects and initiatives contribute to.",
+  // Required. Entity kinds that may carry this attribute. One or more of:
+  // initiative, project, work_package, milestone, goal.
+  "applies_to": ["initiative", "project", "work_package"],
+  // Required. "one" allows a single assignment per entity; "many" allows several.
+  "cardinality": "many",
+  // Optional, default false. When true, every entity whose kind is in applies_to must
+  // have at least one assignment (exactly one when cardinality is "one").
+  "required": false,
+  // Optional. The legal values. An object means each key is a value that carries data.
+  // A list of strings would instead mean a plain set of allowed values (see priority.jsonc).
+  "values": {
+    // Value name. This is what you write after "program:" in an assignment.
+    "platform-v2": {
+      // Data about this program. Its shape is checked by value_schema below.
+      "title": "Platform v2",
+      // Who sponsors the program.
+      "sponsor": "jane",
+      // Chance the program goes ahead, from 0 to 1. Speculative scopes are below 1.
+      "probability": 0.4
+    }
+  },
+  // JSON Schema that every entry under "values" must satisfy.
+  "value_schema": {
+    // Each entry is an object.
+    "type": "object",
+    // Every entry must have a title.
+    "required": ["title"],
+    // The fields an entry may have.
+    "properties": {
+      // Display name.
+      "title": { "type": "string" },
+      // Sponsor name.
+      "sponsor": { "type": "string" },
+      // Probability, constrained to 0..1.
+      "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+    }
+  },
+  // Optional. JSON Schema for the extra data written on an assignment itself,
+  // for example "program: platform-v2 [allocation: 0.5]".
+  "assignment_schema": {
+    // The bracketed data is an object.
+    "type": "object",
+    // Reject fields not listed below.
+    "additionalProperties": false,
+    // The fields an assignment may carry.
+    "properties": {
+      // Share of this entity counted toward the program, from 0 to 1.
+      "allocation": { "type": "number", "minimum": 0, "maximum": 1 }
+    }
+  }
+}

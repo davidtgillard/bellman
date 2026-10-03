@@ -1003,7 +1003,7 @@ def test_plugin_loader_name_validation_and_spec_none(tmp_path: Path) -> None:
         return_value=None,
     ):
         with pytest.raises(PluginLoadError, match="cannot create module spec"):
-            loader._import_plugin(
+            loader.import_plugin_module(
                 PluginSpec(
                     name="x",
                     path=plugin_dir,

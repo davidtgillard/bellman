@@ -12,6 +12,7 @@ from typer.core import TyperGroup
 
 from bellman import layout
 from bellman._version import version_string
+from bellman.attributes.rename import rename_attribute_value
 from bellman.errors import BellmanLayoutError
 from bellman.estimate import (
     DEFAULT_NUM_PEOPLE,
@@ -43,7 +44,8 @@ from bellman.report.wbs import write_wbs_csv, write_wbs_csv_file
 from bellman.report.wbs_tree import write_wbs_tree
 from bellman.roadmap import load, load_for_validation
 from bellman.update import maybe_notify_update, run_update_command
-from bellman.validate import ValidationResult, validate_roadmap
+from bellman.validate import ValidationResult
+from bellman.validators import validate_roadmap_full
 
 app = typer.Typer(
     name="bellman",
@@ -172,9 +174,17 @@ def _run_rename(
     )
 
 
-def _markdown_validation_result(root: Path) -> tuple[ValidationResult, Roadmap]:
+def _markdown_validation_result(
+    root: Path,
+    *,
+    require_validators: bool = False,
+) -> tuple[ValidationResult, Roadmap]:
     load_result = load_for_validation(root)
-    validation = validate_roadmap(load_result.roadmap)
+    validation = validate_roadmap_full(
+        root,
+        load_result.roadmap,
+        require_validators=require_validators,
+    )
     return ValidationResult(
         errors=load_result.errors + validation.errors,
         warnings=validation.warnings,
@@ -508,6 +518,47 @@ def rename_goal(
     _run_rename(old_name, new_name, path=path, kind="goal")
 
 
+attribute_app = typer.Typer(
+    help="Manage attribute definitions and values.",
+    no_args_is_help=True,
+)
+app.add_typer(attribute_app, name="attribute")
+
+
+@attribute_app.command("rename")
+def attribute_rename(
+    attribute: Annotated[
+        str, typer.Argument(help="Attribute name (e.g. program, priority)")
+    ],
+    old_value: Annotated[str, typer.Argument(help="Existing value or key")],
+    new_value: Annotated[str, typer.Argument(help="New value or key")],
+    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
+) -> None:
+    """Rename an attribute value in its definition and every assignment.
+
+    Versions and pins are not changed; a rename is a breaking change, so bump
+    the definition's major version afterwards.
+    """
+    root = _root(path)
+    try:
+        result = rename_attribute_value(root, attribute, old_value, new_value)
+    except (BellmanLayoutError, ValueError) as exc:
+        message = exc.message if isinstance(exc, BellmanLayoutError) else str(exc)
+        typer.echo(message, err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(
+        f"Renamed {attribute}: {old_value} -> {new_value} "
+        f"({result.assignments} assignment(s) in "
+        f"{len(result.updated_paths)} file(s))"
+    )
+    typer.echo(
+        "Note: renaming a value is a breaking change. Bump the major version in "
+        f"{result.definition_path.relative_to(root)}; assignments pinned to the "
+        "old version will then be listed for review.",
+        err=True,
+    )
+
+
 class _WbsTyperGroup(TyperGroup):
     """Route ``report wbs PATH`` to the ``csv`` subcommand for compatibility."""
 
@@ -819,10 +870,22 @@ def status(
             help="Compare the pyfits registry to git markdown",
         ),
     ] = True,
+    require_validators: Annotated[
+        bool,
+        typer.Option(
+            "--require-validators",
+            help=(
+                "Report custom validators that cannot run (the standalone "
+                "binary skips them) as errors instead of warnings"
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Report entity inventory, markdown health, and registry alignment."""
     root = _root(path)
-    result = compute_roadmap_status(root, registry=registry)
+    result = compute_roadmap_status(
+        root, registry=registry, require_validators=require_validators
+    )
     if isinstance(result, Err):
         typer.echo(f"Status failed: {result.err_value}", err=True)
         raise typer.Exit(code=1)
@@ -842,10 +905,22 @@ def validate(
             help="Compare the pyfits registry to git markdown",
         ),
     ] = True,
+    require_validators: Annotated[
+        bool,
+        typer.Option(
+            "--require-validators",
+            help=(
+                "Fail when custom validators under validator/ cannot run "
+                "(the standalone binary skips them)"
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Validate roadmap markdown and compare the registry to git."""
     root = _root(path)
-    result, roadmap = _markdown_validation_result(root)
+    result, roadmap = _markdown_validation_result(
+        root, require_validators=require_validators
+    )
     markdown_failed = _emit_validation_result(result)
 
     if not registry:
@@ -880,10 +955,22 @@ def sync(
         Path | None,
         typer.Argument(help="Roadmap root directory (default: cwd)"),
     ] = None,
+    require_validators: Annotated[
+        bool,
+        typer.Option(
+            "--require-validators",
+            help=(
+                "Fail when custom validators under validator/ cannot run "
+                "(the standalone binary skips them)"
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Sync git markdown into the pyfits registry after validation passes."""
     root = _root(path)
-    result, _roadmap = _markdown_validation_result(root)
+    result, _roadmap = _markdown_validation_result(
+        root, require_validators=require_validators
+    )
     if _emit_validation_result(result):
         raise typer.Exit(code=1)
 

@@ -61,6 +61,14 @@ jobs:
         shell: bash
         run: uv run pyinstaller packaging/bellman.spec --noconfirm
 
+      - name: Smoke test binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./dist/bellman version
+          # Loads the bundled attribute-definition schema and example roadmap.
+          ./dist/bellman validate examples/roadmap --no-registry
+
       - name: Package release artifacts
         shell: bash
         run: uv run python packaging/package_release.py --platform "${{ matrix.id }}"

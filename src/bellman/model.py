@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
+
+from bellman.errors import BellmanError
 
 
 class RelationType(StrEnum):
@@ -54,6 +57,142 @@ UNKNOWN_ESTIMATE = UnknownEstimate()
 Estimate = ThreePointEstimate | UnknownEstimate
 """Work-package duration: a full 3-point estimate or explicitly unknown."""
 
+ATTRIBUTE_KINDS = ("initiative", "project", "work_package", "milestone", "goal")
+"""Entity kinds an attribute may apply to (``applies_to`` tokens)."""
+
+AttributeScalar = str | int | float | bool
+"""JSON scalar usable as an attribute value or assignment payload field."""
+
+AttributeValue = AttributeScalar | Mapping[str, AttributeScalar]
+"""Assigned value: a scalar, or a flat object for open-value attributes."""
+
+AttributeVersion = tuple[int, int]
+"""Attribute contract version as ``(major, minor)``."""
+
+
+def format_attribute_version(version: AttributeVersion) -> str:
+    """Format an attribute version as ``x.y``.
+
+    Args:
+        version: ``(major, minor)`` pair.
+
+    Returns:
+        The dotted string, for example ``"1.2"``.
+    """
+    return f"{version[0]}.{version[1]}"
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeAssignment:
+    """One attribute assigned to an entity.
+
+    Attributes:
+        name: Attribute name (kebab-case).
+        value: Assigned value; a token string for plain-set and keyed
+            attributes, a scalar or flat object for open-value attributes.
+        payload: Flat key/value data written on the assignment itself
+            (checked against the definition's ``assignment_schema``).
+        pinned_version: Contract version the assignment was written against
+            (``name@x.y``), or ``None`` when unpinned.
+    """
+
+    name: str
+    value: AttributeValue
+    payload: Mapping[str, AttributeScalar] = field(default_factory=dict)
+    pinned_version: AttributeVersion | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeDefinition:
+    """One ``attributes/{name}.jsonc`` definition.
+
+    Attributes:
+        name: Attribute name (kebab-case); equals the file stem.
+        path: Path of the definition file (for error reporting).
+        version: Contract version ``(major, minor)``.
+        applies_to: Entity kinds that may carry the attribute.
+        cardinality: ``"one"`` or ``"many"`` assignments per entity.
+        required: When true, every entity of an applicable kind must be
+            assigned the attribute.
+        description: Optional one-line explanation.
+        values: ``None`` for open-value attributes, a tuple of tokens for a
+            plain set, or a mapping from token to entry data for keyed
+            metadata.
+        value_schema: JSON Schema for keyed entries, or for open values.
+        assignment_schema: JSON Schema for assignment payload data.
+    """
+
+    name: str
+    path: str
+    version: AttributeVersion
+    applies_to: tuple[str, ...]
+    cardinality: Literal["one", "many"]
+    required: bool = False
+    description: str = ""
+    values: tuple[str, ...] | Mapping[str, Mapping[str, Any]] | None = None
+    value_schema: Mapping[str, Any] | bool | None = None
+    assignment_schema: Mapping[str, Any] | bool | None = None
+
+    @property
+    def shape(self) -> Literal["set", "keyed", "open"]:
+        """Definition shape: ``set``, ``keyed``, or ``open``."""
+        if self.values is None:
+            return "open"
+        if isinstance(self.values, tuple):
+            return "set"
+        return "keyed"
+
+    def allowed_values(self) -> tuple[str, ...] | None:
+        """Return the legal value tokens, or ``None`` for open values.
+
+        Returns:
+            Tokens for plain-set and keyed attributes; ``None`` when any value
+            matching ``value_schema`` is allowed.
+        """
+        if self.values is None:
+            return None
+        if isinstance(self.values, tuple):
+            return self.values
+        return tuple(self.values)
+
+
+@dataclass(frozen=True, slots=True)
+class AttributeCatalog:
+    """Attribute definitions loaded from ``attributes/``.
+
+    Attributes:
+        definitions: Valid definitions keyed by attribute name.
+        invalid_names: Names (file stems) of definition files that failed
+            validation; assignments naming them are not reported again.
+        problems: Errors found while checking definition files.
+    """
+
+    definitions: Mapping[str, AttributeDefinition] = field(default_factory=dict)
+    invalid_names: frozenset[str] = frozenset()
+    problems: tuple[BellmanError, ...] = ()
+
+    def get(self, name: str) -> AttributeDefinition | None:
+        """Return the definition for ``name``, or ``None`` when unknown.
+
+        Args:
+            name: Attribute name.
+
+        Returns:
+            The definition, or ``None``.
+        """
+        return self.definitions.get(name)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.definitions
+
+    def __iter__(self) -> Iterator[AttributeDefinition]:
+        """Iterate definitions in name order."""
+        for name in sorted(self.definitions):
+            yield self.definitions[name]
+
+    def __len__(self) -> int:
+        return len(self.definitions)
+
 
 @dataclass(frozen=True, slots=True)
 class WorkScope:
@@ -66,6 +205,7 @@ class WorkScope:
     motivation: str
     detailed_description: str
     dependencies: tuple[PrecedenceEdge, ...] = ()
+    classifications: tuple[AttributeAssignment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +232,7 @@ class WorkPackage:
     estimate: Estimate | None = None
     sub_packages: tuple[WorkPackage, ...] = ()
     dependencies: tuple[PrecedenceEdge, ...] = ()
+    classifications: tuple[AttributeAssignment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +244,7 @@ class Milestone:
     path: str
     date: str
     description: str
+    classifications: tuple[AttributeAssignment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +255,7 @@ class Goal:
     title: str
     path: str
     description: str
+    classifications: tuple[AttributeAssignment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +268,7 @@ class Roadmap:
     milestones: tuple[Milestone, ...] = ()
     goals: tuple[Goal, ...] = ()
     archived_initiatives: tuple[Initiative, ...] = ()
+    attributes: AttributeCatalog = field(default_factory=AttributeCatalog)
 
     def initiative_by_name(self, name: str) -> Initiative | None:
         for item in self.initiatives:

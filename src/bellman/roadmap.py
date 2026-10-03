@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bellman import layout
+from bellman.attributes.definition import load_attribute_catalog
 from bellman.errors import BellmanError
 from bellman.model import Goal, Initiative, Milestone, Project, Roadmap
 from bellman.parse.goal import parse_goal
@@ -51,7 +52,8 @@ def load_for_validation(root: Path) -> LoadResult:
     Returns:
         Parsed roadmap plus any load errors encountered while reading files.
     """
-    errors: list[BellmanError] = []
+    catalog, catalog_errors = load_attribute_catalog(root)
+    errors: list[BellmanError] = list(catalog_errors)
     initiatives: list[Initiative] = []
     archived: list[Initiative] = []
     projects: list[Project] = []
@@ -123,6 +125,7 @@ def load_for_validation(root: Path) -> LoadResult:
         milestones=tuple(milestones),
         goals=tuple(goals),
         archived_initiatives=tuple(archived),
+        attributes=catalog,
     )
     return LoadResult(roadmap=roadmap, errors=tuple(errors))
 

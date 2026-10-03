@@ -117,6 +117,7 @@ source = { editable = "." }
 dependencies = [
     { name = "basedpyright" },
     { name = "click" },
+    { name = "jsonschema" },
     { name = "mypy" },
     { name = "pip-audit" },
     { name = "pyfits" },
@@ -132,7 +133,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
-    { name = "jsonschema" },
     { name = "pyinstaller" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -145,6 +145,7 @@ dev = [
 requires-dist = [
     { name = "basedpyright", specifier = ">=1.29.0" },
     { name = "click", specifier = ">=8.1.0" },
+    { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pip-audit", specifier = ">=2.10.0" },
     { name = "pyfits", editable = "../pyfits.git" },
@@ -160,7 +161,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = ">=1.29.0" },
-    { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "pyinstaller", specifier = ">=6.12.0" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-cov", specifier = ">=6.0.0" },

@@ -7,11 +7,22 @@ from pathlib import Path
 from bellman.model import Goal
 from bellman.naming import normalize_entity_name
 from bellman.parse._sections import split_sections
+from bellman.parse.classifications import (
+    parse_classifications_section,
+    split_classifications_section,
+)
 
 
 def parse_goal(path: Path) -> Goal:
     """Parse a goal file."""
-    text = path.read_text(encoding="utf-8")
+    raw_text = path.read_text(encoding="utf-8")
+    # The Classifications section is metadata, not part of the goal description.
+    text, classifications_body = split_classifications_section(raw_text)
+    classifications = (
+        parse_classifications_section(classifications_body)
+        if classifications_body is not None
+        else ()
+    )
     name = normalize_entity_name(path.stem)
     title, sections = split_sections(text)
     if title is None or not title.strip():
@@ -30,4 +41,5 @@ def parse_goal(path: Path) -> Goal:
         title=title,
         path=str(path),
         description=description,
+        classifications=classifications,
     )

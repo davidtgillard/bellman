@@ -11,7 +11,12 @@ from bellman.naming import validate_kebab
 from bellman.plugin.discover import PluginSpec, discover_plugins
 from bellman.plugin.protocol import BellmanPlugin
 
-__all__ = ["PluginLoadError", "load_plugin", "list_plugins"]
+__all__ = [
+    "PluginLoadError",
+    "import_plugin_module",
+    "list_plugins",
+    "load_plugin",
+]
 
 PLUGIN_EXPORT = "PLUGIN"
 
@@ -92,7 +97,7 @@ def load_plugin_or_raise(root: Path, name: str) -> BellmanPlugin:
         msg = f"unknown plugin {name!r}; available: {available}"
         raise PluginLoadError(msg)
 
-    module = _import_plugin(spec)
+    module = import_plugin_module(spec)
     plugin_obj = getattr(module, PLUGIN_EXPORT, None)
     if not isinstance(plugin_obj, BellmanPlugin):
         msg = f"module must define {PLUGIN_EXPORT} as BellmanPlugin"
@@ -117,7 +122,21 @@ def _spec_for_name(root: Path, name: str) -> PluginSpec | None:
     return None
 
 
-def _import_plugin(spec: PluginSpec) -> ModuleType:
+def import_plugin_module(spec: PluginSpec) -> ModuleType:
+    """Import the entry module of a repo-local plugin-style directory.
+
+    Also used for custom validators, which share the plugin directory layout.
+
+    Args:
+        spec: Directory and module name to import under.
+
+    Returns:
+        The executed module.
+
+    Raises:
+        PluginLoadError: When the directory has no entry module or import
+            fails.
+    """
     init_file = spec.path / "__init__.py"
     plugin_file = spec.path / "plugin.py"
     if init_file.is_file():

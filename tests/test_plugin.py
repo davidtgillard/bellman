@@ -542,11 +542,11 @@ def test_bellman_context_graph_error(tmp_path: Path) -> None:
 
 def test_load_plugin_no_entry_file(tmp_path: Path) -> None:
     from bellman.plugin.discover import PluginSpec
-    from bellman.plugin.loader import PluginLoadError, _import_plugin
+    from bellman.plugin.loader import PluginLoadError, import_plugin_module
 
     empty = tmp_path / "plugin" / "empty"
     empty.mkdir(parents=True)
     with pytest.raises(PluginLoadError, match="no __init__.py"):
-        _import_plugin(
+        import_plugin_module(
             PluginSpec(name="empty", path=empty, module_name="bellman_plugin_empty")
         )

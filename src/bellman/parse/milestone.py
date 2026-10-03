@@ -7,6 +7,10 @@ from pathlib import Path
 from bellman.model import Milestone
 from bellman.naming import normalize_entity_name
 from bellman.parse._sections import section_by_title, split_sections
+from bellman.parse.classifications import (
+    CLASSIFICATIONS_TITLE,
+    parse_classifications_section,
+)
 
 
 def parse_milestone(path: Path) -> Milestone:
@@ -24,10 +28,17 @@ def parse_milestone(path: Path) -> Milestone:
     date = date_sec.body.strip().splitlines()[0].strip()
     desc_sec = section_by_title(sections, "Description")
     description = desc_sec.body if desc_sec is not None else ""
+    classifications_sec = section_by_title(sections, CLASSIFICATIONS_TITLE)
+    classifications = (
+        parse_classifications_section(classifications_sec.body)
+        if classifications_sec is not None
+        else ()
+    )
     return Milestone(
         name=name,
         title=title,
         path=str(path),
         date=date,
         description=description.strip(),
+        classifications=classifications,
     )
