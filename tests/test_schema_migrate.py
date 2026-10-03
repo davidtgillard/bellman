@@ -47,30 +47,30 @@ def test_needs_migration_registry_not_object(tmp_path: Path) -> None:
 
 
 def test_needs_migration_node_types_not_list(tmp_path: Path) -> None:
-    _write_registry(tmp_path, {"node_types": {"goal": True}})
+    _write_registry(tmp_path, {"node_types": {"milestone": True}})
     assert registry_needs_schema_migration(tmp_path) is False
 
 
 def test_needs_migration_skips_non_dict_entries(tmp_path: Path) -> None:
-    _write_registry(tmp_path, {"node_types": ["goal", {"type": "goal"}]})
+    _write_registry(tmp_path, {"node_types": ["milestone", {"type": "milestone"}]})
     assert registry_needs_schema_migration(tmp_path) is True
 
 
-def test_needs_migration_nested_goal_returns_false(tmp_path: Path) -> None:
+def test_needs_migration_nested_milestone_returns_false(tmp_path: Path) -> None:
     _write_registry(
         tmp_path,
         {
             "node_types": [
                 {"type": KIND_TYPE},
-                {"type": "goal", "container_node": KIND_TYPE},
+                {"type": "milestone", "container_node": KIND_TYPE},
             ]
         },
     )
     assert registry_needs_schema_migration(tmp_path) is False
 
 
-def test_needs_migration_legacy_goal_without_kind(tmp_path: Path) -> None:
-    _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+def test_needs_migration_legacy_milestone_without_kind(tmp_path: Path) -> None:
+    _write_registry(tmp_path, {"node_types": [{"type": "milestone"}]})
     assert registry_needs_schema_migration(tmp_path) is True
 
 
@@ -80,7 +80,7 @@ def test_migrate_noop_when_already_nested(tmp_path: Path) -> None:
         {
             "node_types": [
                 {"type": KIND_TYPE},
-                {"type": "goal", "container_node": KIND_TYPE},
+                {"type": "milestone", "container_node": KIND_TYPE},
             ]
         },
     )
@@ -92,6 +92,7 @@ def test_migrate_strips_legacy_and_resets_links(tmp_path: Path) -> None:
         tmp_path,
         {
             "node_types": [
+                {"type": "milestone"},
                 {"type": "goal"},
                 {"type": "initiative"},
                 "skip-me",
@@ -136,7 +137,7 @@ def test_migrate_strips_legacy_and_resets_links(tmp_path: Path) -> None:
 
 
 def test_migrate_read_failure_returns_err(tmp_path: Path) -> None:
-    path = _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    path = _write_registry(tmp_path, {"node_types": [{"type": "milestone"}]})
 
     def _read(
         self: Path, encoding: str | None = None, errors: str | None = None
@@ -158,7 +159,7 @@ def test_migrate_read_failure_returns_err(tmp_path: Path) -> None:
 
 
 def test_migrate_write_registry_failure(tmp_path: Path) -> None:
-    path = _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    path = _write_registry(tmp_path, {"node_types": [{"type": "milestone"}]})
     original = Path.write_text
 
     def _write(
@@ -179,7 +180,7 @@ def test_migrate_write_registry_failure(tmp_path: Path) -> None:
 
 
 def test_migrate_write_links_failure(tmp_path: Path) -> None:
-    _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    _write_registry(tmp_path, {"node_types": [{"type": "milestone"}]})
     links = tmp_path / "links"
     links.mkdir()
     links_path = links / "links.jsonc"
@@ -204,7 +205,8 @@ def test_migrate_write_links_failure(tmp_path: Path) -> None:
 
 
 def test_is_kind_root_name() -> None:
-    assert is_kind_root_name("goal") is True
+    assert is_kind_root_name("milestone") is True
+    assert is_kind_root_name("goal") is False
     assert is_kind_root_name("work_scope") is True
     assert is_kind_root_name("wp") is False
 
@@ -219,7 +221,7 @@ def test_work_scope_parent_migration_needed_for_split_kind_roots(
         {
             "node_types": [
                 {"type": KIND_TYPE},
-                {"type": "goal", "container_node": KIND_TYPE},
+                {"type": "milestone", "container_node": KIND_TYPE},
             ],
             "instances": [
                 {
@@ -254,7 +256,7 @@ def test_work_scope_parent_migration_not_needed_when_hosted(
         {
             "node_types": [
                 {"type": KIND_TYPE},
-                {"type": "goal", "container_node": KIND_TYPE},
+                {"type": "milestone", "container_node": KIND_TYPE},
             ],
             "instances": [
                 {
@@ -289,7 +291,7 @@ def test_work_scope_parent_migration_skips_non_list_instances(tmp_path: Path) ->
         {
             "node_types": [
                 {"type": KIND_TYPE},
-                {"type": "goal", "container_node": KIND_TYPE},
+                {"type": "milestone", "container_node": KIND_TYPE},
             ],
             "instances": {"guid": "x"},
         },
@@ -302,7 +304,7 @@ def test_work_scope_parent_migration_missing_file(tmp_path: Path) -> None:
 
 
 def test_migrate_removes_nodes_dir(tmp_path: Path) -> None:
-    _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    _write_registry(tmp_path, {"node_types": [{"type": "milestone"}]})
     nodes = tmp_path / "nodes"
     nested = nodes / "kind" / "initiative"
     nested.mkdir(parents=True)
@@ -314,7 +316,7 @@ def test_migrate_removes_nodes_dir(tmp_path: Path) -> None:
 
 
 def test_migrate_rmtree_nodes_failure(tmp_path: Path) -> None:
-    _write_registry(tmp_path, {"node_types": [{"type": "goal"}]})
+    _write_registry(tmp_path, {"node_types": [{"type": "milestone"}]})
     nodes = tmp_path / "nodes"
     nodes.mkdir()
 
@@ -369,3 +371,124 @@ def test_remove_obsolete_link_types_strips_promoted_from(tmp_path: Path) -> None
         inst.get("guid") != "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         for inst in data.get("instances", [])
     )
+
+
+def test_remove_obsolete_link_types_strips_goals(tmp_path: Path) -> None:
+    kind_guid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    goal_guid = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    link_guid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    _write_registry(
+        tmp_path,
+        {
+            "node_types": [
+                {"type": "goal", "container_node": "kind"},
+                {"type": "milestone", "container_node": "kind"},
+            ],
+            "link_types": [
+                {"link_type": "supports", "in_type": "project", "out_type": "goal"},
+                {"link_type": "targets", "in_type": "project", "out_type": "milestone"},
+            ],
+            "nested_link_types": [
+                {
+                    "link_type": "supports_wp",
+                    "in_type": "work_package",
+                    "out_type": "goal",
+                }
+            ],
+            "instances": [
+                {
+                    "guid": kind_guid,
+                    "name": "goal",
+                    "type": "kind",
+                    "kind": "node",
+                },
+                {
+                    "guid": goal_guid,
+                    "name": "reduce-churn",
+                    "type": "goal",
+                    "kind": "node",
+                    "parent_guid": kind_guid,
+                },
+                {
+                    "guid": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+                    "name": "ga",
+                    "type": "milestone",
+                    "kind": "node",
+                },
+                {
+                    "guid": link_guid,
+                    "name": "supports-1",
+                    "type": "supports",
+                    "kind": "link",
+                },
+            ],
+        },
+    )
+    subgraph = tmp_path / "nodes" / "kind" / "goal goal" / ".fits"
+    subgraph.mkdir(parents=True)
+    (subgraph / "subgraph.jsonc").write_text(
+        json.dumps(
+            {
+                "parent_guid": kind_guid,
+                "nodes": [{"guid": goal_guid, "type": "goal"}],
+                "links": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    other = tmp_path / "nodes" / "kind" / "project project" / ".fits"
+    other.mkdir(parents=True)
+    (other / "subgraph.jsonc").write_text(
+        json.dumps(
+            {
+                "parent_guid": "other",
+                "nodes": [],
+                "links": [
+                    {
+                        "guid": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                        "link_type": "supports",
+                        "in": "p",
+                        "out": goal_guid,
+                    },
+                    {
+                        "guid": "11111111-1111-4111-8111-111111111111",
+                        "link_type": "targets",
+                        "in": "p",
+                        "out": "m",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = remove_obsolete_link_types(tmp_path)
+    assert isinstance(result, Ok)
+    assert link_guid in result.ok_value
+    assert "ffffffff-ffff-4fff-8fff-ffffffffffff" in result.ok_value
+    data = json.loads(
+        (tmp_path / ".fits" / "registry.json").read_text(encoding="utf-8")
+    )
+    assert all(entry.get("type") != "goal" for entry in data["node_types"])
+    assert all(inst.get("type") != "goal" for inst in data["instances"])
+    assert all(inst.get("name") != "goal" for inst in data["instances"])
+    assert all(entry.get("link_type") != "supports" for entry in data["link_types"])
+    assert data["nested_link_types"] == []
+    assert not (tmp_path / "nodes" / "kind" / "goal goal").exists()
+    kept = json.loads((other / "subgraph.jsonc").read_text(encoding="utf-8"))
+    assert [link["link_type"] for link in kept["links"]] == ["targets"]
+
+
+def test_remove_obsolete_goal_subgraph_rmtree_failure(tmp_path: Path) -> None:
+    subgraph = tmp_path / "nodes" / "kind" / "goal goal" / ".fits"
+    subgraph.mkdir(parents=True)
+    (subgraph / "subgraph.jsonc").write_text("{}\n", encoding="utf-8")
+
+    def _rmtree(_path: object, *_args: object, **_kwargs: object) -> None:
+        raise OSError("busy")
+
+    with patch("bellman.graph.schema_migrate.shutil.rmtree", _rmtree):
+        result = remove_obsolete_link_types(tmp_path)
+    assert isinstance(result, Err)
+    assert result.err_value.code == "schema_migration_failed"
+    assert (tmp_path / "nodes" / "kind" / "goal goal").is_dir()

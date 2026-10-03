@@ -10,7 +10,7 @@ from bellman.graph import link_naming
 from bellman.graph.identity import InstanceIndex
 from bellman.model import Initiative, PrecedenceEdge, Project, Roadmap, WorkPackage
 
-_ENTITY_KINDS = ("initiative", "project", "goal", "milestone")
+_ENTITY_KINDS = ("initiative", "project", "milestone")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,11 +103,6 @@ def milestone_node_id(name: str) -> str:
     return entity_node_id("milestone", name)
 
 
-def goal_node_id(name: str) -> str:
-    """Opaque node id for a goal."""
-    return entity_node_id("goal", name)
-
-
 def flatten_wps(
     packages: tuple[WorkPackage, ...],
     parent: WorkPackage | None,
@@ -151,8 +146,6 @@ def resolve_entity_ref(roadmap: Roadmap, ref: str) -> str:
             matches.append(("initiative", entity_node_id("initiative", ref)))
     if roadmap.milestone_by_name(ref) is not None:
         matches.append(("milestone", entity_node_id("milestone", ref)))
-    if roadmap.goal_by_name(ref) is not None:
-        matches.append(("goal", entity_node_id("goal", ref)))
     if len(matches) > 1:
         kinds = ", ".join(kind for kind, _ in matches)
         msg = f"ambiguous dependency reference {ref!r}: matches {kinds}"
@@ -194,8 +187,6 @@ def resolve_entity_ref_from_layout(root: Path, ref: str) -> str:
         matches.append(("initiative", entity_node_id("initiative", ref)))
     if layout.milestone_path(root, ref).is_file():
         matches.append(("milestone", entity_node_id("milestone", ref)))
-    if layout.goal_path(root, ref).is_file():
-        matches.append(("goal", entity_node_id("goal", ref)))
     if len(matches) > 1:
         kinds = ", ".join(kind for kind, _ in matches)
         msg = f"ambiguous dependency reference {ref!r}: matches {kinds}"
@@ -219,8 +210,6 @@ def desired_nodes(roadmap: Roadmap) -> set[DesiredNode]:
             nodes.add(DesiredNode("work_package", wp_node_id(project.name, wp.slug)))
     for milestone in roadmap.milestones:
         nodes.add(DesiredNode("milestone", milestone_node_id(milestone.name)))
-    for goal in roadmap.goals:
-        nodes.add(DesiredNode("goal", goal_node_id(goal.name)))
     return nodes
 
 

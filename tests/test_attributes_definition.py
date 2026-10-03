@@ -60,7 +60,7 @@ def test_schema_document_is_valid_and_versioned() -> None:
         ),
         _valid(description="d", required=True, cardinality="many"),
         _valid(**{"$schema": "https://example.com/s.json"}),
-        _valid(applies_to=["initiative", "work_package", "milestone", "goal"]),
+        _valid(applies_to=["initiative", "work_package", "milestone"]),
     ],
 )
 def test_schema_accepts_valid_documents(doc: dict[str, Any]) -> None:
@@ -303,7 +303,7 @@ def test_boolean_schemas_are_accepted(tmp_path: Path) -> None:
             {
                 "name": "anything",
                 "version": "0.1",
-                "applies_to": ["goal"],
+                "applies_to": ["milestone"],
                 "cardinality": "many",
                 "value_schema": True,
                 "assignment_schema": False,
@@ -319,7 +319,7 @@ def test_example_definitions_load_cleanly() -> None:
     catalog, errors = load_attribute_catalog(EXAMPLES)
     assert errors == ()
     assert catalog.problems == ()
-    assert [d.name for d in catalog] == ["priority", "program"]
+    assert [d.name for d in catalog] == ["goal", "priority", "program"]
 
 
 def test_load_schema_missing(monkeypatch: pytest.MonkeyPatch) -> None:

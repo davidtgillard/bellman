@@ -49,7 +49,7 @@ class ValidationContext:
 
         Args:
             kind: When set, yield only entities of this kind (``initiative``,
-                ``project``, ``work_package``, ``milestone``, or ``goal``).
+                ``project``, ``work_package``, or ``milestone``).
 
         Yields:
             One :class:`~bellman.attributes.entities.EntityRef` per entity.

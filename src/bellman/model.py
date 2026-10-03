@@ -57,7 +57,7 @@ UNKNOWN_ESTIMATE = UnknownEstimate()
 Estimate = ThreePointEstimate | UnknownEstimate
 """Work-package duration: a full 3-point estimate or explicitly unknown."""
 
-ATTRIBUTE_KINDS = ("initiative", "project", "work_package", "milestone", "goal")
+ATTRIBUTE_KINDS = ("initiative", "project", "work_package", "milestone")
 """Entity kinds an attribute may apply to (``applies_to`` tokens)."""
 
 AttributeScalar = str | int | float | bool
@@ -248,17 +248,6 @@ class Milestone:
 
 
 @dataclass(frozen=True, slots=True)
-class Goal:
-    """Outcome the roadmap contributes toward."""
-
-    name: str
-    title: str
-    path: str
-    description: str
-    classifications: tuple[AttributeAssignment, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
 class Roadmap:
     """Loaded roadmap snapshot."""
 
@@ -266,7 +255,6 @@ class Roadmap:
     initiatives: tuple[Initiative, ...] = ()
     projects: tuple[Project, ...] = ()
     milestones: tuple[Milestone, ...] = ()
-    goals: tuple[Goal, ...] = ()
     archived_initiatives: tuple[Initiative, ...] = ()
     attributes: AttributeCatalog = field(default_factory=AttributeCatalog)
 
@@ -284,12 +272,6 @@ class Roadmap:
 
     def milestone_by_name(self, name: str) -> Milestone | None:
         for item in self.milestones:
-            if item.name == name:
-                return item
-        return None
-
-    def goal_by_name(self, name: str) -> Goal | None:
-        for item in self.goals:
             if item.name == name:
                 return item
         return None

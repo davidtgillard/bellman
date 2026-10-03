@@ -10,7 +10,6 @@ from attr_support import (
     PRIORITY_JSONC,
     make_root,
     write_attribute,
-    write_goal,
     write_initiative,
     write_milestone,
     write_project,
@@ -58,19 +57,17 @@ def test_classifications_load_on_every_kind(tmp_path: Path) -> None:
     write_initiative(root, "i", ["priority: P1"])
     write_project(root, "p", ["priority: P0"])
     write_milestone(root, "m", ["priority: P2"])
-    write_goal(root, "g", ["priority: P2"])
     roadmap = load(root)
     assert roadmap.initiatives[0].classifications[0].value == "P1"
     assert roadmap.projects[0].classifications[0].value == "P0"
     assert roadmap.milestones[0].classifications[0].value == "P2"
-    assert roadmap.goals[0].classifications[0].value == "P2"
 
 
-def test_goal_description_excludes_classifications(tmp_path: Path) -> None:
+def test_milestone_description_excludes_classifications(tmp_path: Path) -> None:
     root = make_root(tmp_path)
     write_attribute(root, "priority", PRIORITY_JSONC)
-    write_goal(root, "g", ["priority: P1"])
-    description = load(root).goals[0].description
+    write_milestone(root, "ga", ["priority: P1"])
+    description = load(root).milestones[0].description
     assert "Classifications" not in description
     assert "priority" not in description
 

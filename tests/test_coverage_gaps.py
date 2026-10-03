@@ -42,7 +42,6 @@ from bellman.graph.links_file import (
 )
 from bellman.graph.registry import bootstrap_registry, ensure_kind_roots
 from bellman.model import (
-    Goal,
     Hardness,
     Initiative,
     Milestone,
@@ -81,7 +80,7 @@ def test_bellman_error_and_warning_with_line() -> None:
 
 def test_local_and_natural_name_fallbacks() -> None:
     assert local_name_from_node_id("bare") == "bare"
-    assert local_name_from_node_id("goal--name") == "name"
+    assert local_name_from_node_id("milestone--name") == "name"
     assert natural_name_from_node_id("unqualified") == "unqualified"
 
 
@@ -117,21 +116,21 @@ def test_resolve_entity_ref_archived_initiative() -> None:
 
 def test_resolve_entity_ref_from_layout_matrix(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "g1")
+    layout.create_milestone(tmp_path, "g1")
     layout.create_milestone(tmp_path, "m1")
     layout.create_initiative(tmp_path, "i1")
     layout.create_project(tmp_path, "p1")
     archived = layout.archived_initiative_path(tmp_path, "arch")
     archived.write_text("# Arch\n", encoding="utf-8")
 
-    assert resolve_entity_ref_from_layout(tmp_path, "g1") == "goal/g1"
+    assert resolve_entity_ref_from_layout(tmp_path, "g1") == "milestone/g1"
     assert resolve_entity_ref_from_layout(tmp_path, "m1") == "milestone/m1"
     assert resolve_entity_ref_from_layout(tmp_path, "i1") == "initiative/i1"
     assert resolve_entity_ref_from_layout(tmp_path, "p1") == "project/p1"
     assert resolve_entity_ref_from_layout(tmp_path, "arch") == "initiative/arch"
     assert resolve_entity_ref_from_layout(tmp_path, "missing") == "missing"
 
-    layout.create_goal(tmp_path, "clash")
+    layout.create_milestone(tmp_path, "clash")
     layout.create_initiative(tmp_path, "clash")
     with pytest.raises(ValueError, match="ambiguous"):
         resolve_entity_ref_from_layout(tmp_path, "clash")
@@ -194,8 +193,8 @@ def test_precedes_link_name() -> None:
 
 
 def test_is_legacy_flat_unknown_type_and_slash() -> None:
-    assert not is_legacy_flat_node_id("kind", "goal")
-    assert not is_legacy_flat_node_id("goal", "goal/nested")
+    assert not is_legacy_flat_node_id("kind", "milestone")
+    assert not is_legacy_flat_node_id("milestone", "milestone/nested")
 
 
 def test_ignore_duplicate_without_guid() -> None:
@@ -280,7 +279,7 @@ def test_links_file_helpers_and_edge_cases(tmp_path: Path) -> None:
         _load_jsonc(path)
 
     nodes = tmp_path / "nodes"
-    sub = nodes / "goal" / "subgraph.jsonc"
+    sub = nodes / "milestone" / "subgraph.jsonc"
     sub.parent.mkdir(parents=True)
     sub.write_text("{not-json", encoding="utf-8")
     assert _drop_links_from_subgraphs(tmp_path, {"g"}) == 0
@@ -331,7 +330,7 @@ def test_reconcile_write_failure(tmp_path: Path) -> None:
                     {
                         "name": "a",
                         "kind": "node",
-                        "type": "goal",
+                        "type": "milestone",
                         "guid": node,
                         "scope": "root",
                     },
@@ -446,14 +445,14 @@ def test_delta_error_paths(tmp_path: Path) -> None:
         instances=(
             InstanceRecord(
                 guid="1",
-                instance_name="goal/g",
-                type_name="goal",
+                instance_name="milestone/g",
+                type_name="milestone",
                 kind="node",
             ),
             InstanceRecord(
                 guid="2",
-                instance_name="goal/h",
-                type_name="goal",
+                instance_name="milestone/h",
+                type_name="milestone",
                 kind="node",
             ),
             InstanceRecord(
@@ -836,11 +835,9 @@ def test_model_lookup_misses_and_hits() -> None:
                 description="d",
             ),
         ),
-        goals=(Goal(name="g", title="G", path="goals/g.md", description="d"),),
     )
     assert roadmap.milestone_by_name("ms") is not None
     assert roadmap.milestone_by_name("missing") is None
-    assert roadmap.goal_by_name("g") is not None
     assert roadmap.work_package_slugs("missing") == set()
 
 
@@ -1044,8 +1041,8 @@ def test_layout_project_path_and_rename_collisions(tmp_path: Path) -> None:
     with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "projects/nope")
 
-    layout.create_goal(tmp_path, "g-old")
-    layout.create_goal(tmp_path, "g-new")
+    layout.create_milestone(tmp_path, "g-old")
+    layout.create_milestone(tmp_path, "g-new")
     with pytest.raises(BellmanLayoutError, match="already exists"):
         layout.rename_entity(tmp_path, "g-old", "g-new")
 
@@ -1071,7 +1068,7 @@ def test_history_skips_bad_tombstone_and_instance(tmp_path: Path) -> None:
                 "kind": "fits-registry",
                 "node_types": [
                     {
-                        "type": "goal",
+                        "type": "milestone",
                         "tombstones": [
                             "bad",
                             {"guid": "g"},
@@ -1089,7 +1086,7 @@ def test_history_skips_bad_tombstone_and_instance(tmp_path: Path) -> None:
                     {
                         "guid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                         "name": "g1",
-                        "type": "goal",
+                        "type": "milestone",
                         "kind": "node",
                         "scope": "root",
                     },

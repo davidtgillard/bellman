@@ -289,7 +289,7 @@ def _rewrite_work_packages(text: str, attribute: str, old: str, new: str) -> str
 
 def _entity_files(root: Path) -> tuple[list[Path], list[Path]]:
     markdown: list[Path] = []
-    for directory in (layout.INITIATIVES_DIR, layout.MILESTONES_DIR, layout.GOALS_DIR):
+    for directory in (layout.INITIATIVES_DIR, layout.MILESTONES_DIR):
         base = root / directory
         if base.is_dir():
             markdown.extend(sorted(base.glob("*.md")))

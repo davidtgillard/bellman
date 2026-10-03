@@ -13,8 +13,8 @@ from attr_support import (
     wp_block,
     wp_yaml,
     write_attribute,
-    write_goal,
     write_initiative,
+    write_milestone,
     write_project,
 )
 from typer.testing import CliRunner
@@ -99,7 +99,7 @@ def test_identical_strings_elsewhere_in_definition_are_untouched(
         """{
   "name": "tag",
   "version": "1.0",
-  "applies_to": ["goal"],
+  "applies_to": ["milestone"],
   "cardinality": "many",
   "description": "alpha is the first",
   "values": ["beta", "alpha"],
@@ -110,7 +110,7 @@ def test_identical_strings_elsewhere_in_definition_are_untouched(
 }
 """,
     )
-    write_goal(root, "g", ["tag: alpha"])
+    write_milestone(root, "g", ["tag: alpha"])
     rename_attribute_value(root, "tag", "alpha", "gamma")
     text = (root / "attributes" / "tag.jsonc").read_text(encoding="utf-8")
     assert '"values": ["beta", "gamma"]' in text
@@ -213,13 +213,13 @@ def test_parked_project_and_other_kinds_are_rewritten(tmp_path: Path) -> None:
             {
                 "name": "stage",
                 "version": "1.0",
-                "applies_to": ["goal"],
+                "applies_to": ["milestone"],
                 "cardinality": "one",
                 "values": ["draft", "live"],
             }
         ),
     )
-    goal = write_goal(root, "g", ["stage: draft"])
+    milestone = write_milestone(root, "g", ["stage: draft"])
     project = write_project(root, "beta", ["priority: P1"])
     archived_dir = project.parent.with_name("beta.archived")
     project.parent.rename(archived_dir)
@@ -228,7 +228,7 @@ def test_parked_project_and_other_kinds_are_rewritten(tmp_path: Path) -> None:
     parked.write_text(parked_text.replace("priority: P1", "priority: P2"))
 
     result = rename_attribute_value(root, "stage", "draft", "live-soon")
-    assert result.updated_paths == (goal,)
+    assert result.updated_paths == (milestone,)
 
     again = rename_attribute_value(root, "priority", "P2", "low")
     assert again.updated_paths == (parked,)

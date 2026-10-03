@@ -44,7 +44,7 @@ def _index(*records: InstanceRecord) -> InstanceIndex:
 
 
 def test_parent_logical_path() -> None:
-    assert _parent_logical_path("goal") is None
+    assert _parent_logical_path("milestone") is None
     assert _parent_logical_path("project/demo") == "project"
     assert _parent_logical_path("project/demo/wp") == "project/demo"
 
@@ -52,7 +52,7 @@ def test_parent_logical_path() -> None:
 def test_container_logical_name_shares_work_scope() -> None:
     assert _container_logical_name("initiative", "initiative/foo") == "work_scope"
     assert _container_logical_name("project", "project/foo") == "work_scope"
-    assert _container_logical_name("goal", "goal/foo") == "goal"
+    assert _container_logical_name("milestone", "milestone/foo") == "milestone"
     assert _container_logical_name("work_package", "project/foo/wp") == "project/foo"
 
 
@@ -71,7 +71,7 @@ def test_history_to_fits_error() -> None:
 
 def test_rename_graph_kind() -> None:
     assert _rename_graph_kind("archived-initiative") == "initiative"
-    assert _rename_graph_kind("goal") == "goal"
+    assert _rename_graph_kind("milestone") == "milestone"
 
 
 def test_bootstrap_session_migrate_err() -> None:
@@ -136,7 +136,7 @@ def test_prune_stale_registry_skips_links_and_kind() -> None:
     index = _index(
         InstanceRecord(
             guid="kind-guid",
-            instance_name="goal",
+            instance_name="milestone",
             type_name="kind",
             kind="node",
         ),
@@ -148,19 +148,19 @@ def test_prune_stale_registry_skips_links_and_kind() -> None:
         ),
         InstanceRecord(
             guid="stale-guid",
-            instance_name="stale-goal",
-            type_name="goal",
+            instance_name="stale-milestone",
+            type_name="milestone",
             kind="node",
         ),
         InstanceRecord(
             guid="keep-guid",
-            instance_name="keep-goal",
-            type_name="goal",
+            instance_name="keep-milestone",
+            type_name="milestone",
             kind="node",
         ),
     )
     with patch("bellman.graph.sync.InstanceIndex.load", return_value=Ok(index)):
-        result = _prune_stale_registry(repo, Path("/tmp"), {"keep-goal"})
+        result = _prune_stale_registry(repo, Path("/tmp"), {"keep-milestone"})
     assert isinstance(result, Ok)
     assert repo.remove.call_count == 1
     assert repo.remove.call_args.args[0].value == "stale-guid"
@@ -172,8 +172,8 @@ def test_prune_stale_registry_remove_err() -> None:
     index = _index(
         InstanceRecord(
             guid="stale-guid",
-            instance_name="stale-goal",
-            type_name="goal",
+            instance_name="stale-milestone",
+            type_name="milestone",
             kind="node",
         ),
     )
@@ -269,13 +269,13 @@ def test_prune_stale_graph_stale_edge_remove_err() -> None:
     keep = InstanceRecord(
         guid="keep-guid",
         instance_name="keep",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     gone = InstanceRecord(
         guid="gone-guid",
         instance_name="gone",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     index = _index(keep, gone)
@@ -310,13 +310,13 @@ def test_prune_stale_graph_stale_edge_reload_err() -> None:
     keep = InstanceRecord(
         guid="keep-guid",
         instance_name="keep",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     gone = InstanceRecord(
         guid="gone-guid",
         instance_name="gone",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     index = _index(keep, gone)
@@ -342,13 +342,13 @@ def test_prune_stale_graph_stale_node_reconcile_err() -> None:
     keep = InstanceRecord(
         guid="keep-guid",
         instance_name="keep",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     stale = InstanceRecord(
         guid="stale-guid",
         instance_name="stale",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     index = _index(keep, stale)
@@ -377,13 +377,13 @@ def test_prune_stale_graph_stale_node_remove_err() -> None:
     keep = InstanceRecord(
         guid="keep-guid",
         instance_name="keep",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     stale = InstanceRecord(
         guid="stale-guid",
         instance_name="stale",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     index = _index(keep, stale)
@@ -405,14 +405,14 @@ def test_prune_stale_graph_stale_node_remove_err() -> None:
 
 def test_prune_deleted_entity_libfits_unavailable(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=False):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "lib_not_found"
 
 
 def test_prune_deleted_entity_not_initialized(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=True):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "not_initialized"
 
@@ -437,7 +437,7 @@ def test_prune_deleted_entity_open_err(tmp_path: Path) -> None:
             return_value=Err(_fits_err("open")),
         ),
     ):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "open"
 
@@ -450,8 +450,8 @@ def test_prune_deleted_entity_bootstrap_err(tmp_path: Path) -> None:
     index = _index(
         InstanceRecord(
             guid="g1",
-            instance_name="goal/x",
-            type_name="goal",
+            instance_name="milestone/x",
+            type_name="milestone",
             kind="node",
         ),
     )
@@ -465,7 +465,7 @@ def test_prune_deleted_entity_bootstrap_err(tmp_path: Path) -> None:
             return_value=Err(_fits_err("boot")),
         ),
     ):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "boot"
 
@@ -477,19 +477,19 @@ def test_prune_deleted_entity_remove_err(tmp_path: Path) -> None:
     repo.__exit__.return_value = None
     repo.remove.return_value = Err(_fits_err("remove"))
     kind = InstanceRecord(
-        guid="kind-goal",
-        instance_name="goal",
+        guid="kind-milestone",
+        instance_name="milestone",
         type_name="kind",
         kind="node",
     )
-    goal = InstanceRecord(
+    milestone = InstanceRecord(
         guid="g1",
         instance_name="x",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
-        parent_guid="kind-goal",
+        parent_guid="kind-milestone",
     )
-    index = _index(kind, goal)
+    index = _index(kind, milestone)
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch("bellman.graph.sync.reconcile_link_artifacts", return_value=Ok(None)),
@@ -497,7 +497,7 @@ def test_prune_deleted_entity_remove_err(tmp_path: Path) -> None:
         patch("bellman.graph.sync.Repo.open", return_value=Ok(repo)),
         patch("bellman.graph.sync._bootstrap_session", return_value=Ok(None)),
     ):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "remove"
 
@@ -509,19 +509,19 @@ def test_prune_deleted_entity_validate_err(tmp_path: Path) -> None:
     repo.__exit__.return_value = None
     repo.remove.return_value = Ok(None)
     kind = InstanceRecord(
-        guid="kind-goal",
-        instance_name="goal",
+        guid="kind-milestone",
+        instance_name="milestone",
         type_name="kind",
         kind="node",
     )
-    goal = InstanceRecord(
+    milestone = InstanceRecord(
         guid="g1",
         instance_name="x",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
-        parent_guid="kind-goal",
+        parent_guid="kind-milestone",
     )
-    index = _index(kind, goal)
+    index = _index(kind, milestone)
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch("bellman.graph.sync.reconcile_link_artifacts", return_value=Ok(None)),
@@ -533,7 +533,7 @@ def test_prune_deleted_entity_validate_err(tmp_path: Path) -> None:
             return_value=Err(_fits_err("validate")),
         ),
     ):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "validate"
 
@@ -546,14 +546,14 @@ def test_sync_renamed_entity_unknown_kind(tmp_path: Path) -> None:
 
 def test_sync_renamed_entity_libfits_unavailable(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=False):
-        result = sync_renamed_entity(tmp_path, "goal", "old", "new")
+        result = sync_renamed_entity(tmp_path, "milestone", "old", "new")
     assert isinstance(result, Err)
     assert result.err_value.code == "lib_not_found"
 
 
 def test_sync_renamed_entity_not_initialized(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=True):
-        result = sync_renamed_entity(tmp_path, "goal", "old", "new")
+        result = sync_renamed_entity(tmp_path, "milestone", "old", "new")
     assert isinstance(result, Err)
     assert result.err_value.code == "not_initialized"
 
@@ -566,14 +566,14 @@ def test_sync_created_entity_unknown_kind(tmp_path: Path) -> None:
 
 def test_sync_created_entity_libfits_unavailable(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=False):
-        result = sync_created_entity(tmp_path, "goal", "x")
+        result = sync_created_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "lib_not_found"
 
 
 def test_sync_created_entity_not_initialized(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=True):
-        result = sync_created_entity(tmp_path, "goal", "x")
+        result = sync_created_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "not_initialized"
 
@@ -603,8 +603,8 @@ def test_ensure_node_index_err() -> None:
             repo,
             Path("/tmp"),
             graph,
-            type_name="goal",
-            logical_name="goal/x",
+            type_name="milestone",
+            logical_name="milestone/x",
             title="X",
         )
     assert isinstance(result, Err)
@@ -633,8 +633,8 @@ def test_ensure_node_create_err_without_recovery() -> None:
     repo.new_node.return_value = Err(_fits_err("create"))
     graph = Graph(nodes=(), edges=())
     kind = InstanceRecord(
-        guid="kind-goal",
-        instance_name="goal",
+        guid="kind-milestone",
+        instance_name="milestone",
         type_name="kind",
         kind="node",
     )
@@ -644,12 +644,12 @@ def test_ensure_node_create_err_without_recovery() -> None:
             repo,
             Path("/tmp"),
             graph,
-            type_name="goal",
-            logical_name="goal/x",
+            type_name="milestone",
+            logical_name="milestone/x",
             title="X",
         )
     assert isinstance(result, Err)
-    assert "failed to ensure node goal/x" in str(result.err_value)
+    assert "failed to ensure node milestone/x" in str(result.err_value)
 
 
 def test_ensure_link_index_err() -> None:
@@ -843,8 +843,8 @@ def test_migrate_legacy_non_legacy_skipped() -> None:
     index = _index(
         InstanceRecord(
             guid="g",
-            instance_name="goal/modern",
-            type_name="goal",
+            instance_name="milestone/modern",
+            type_name="milestone",
             kind="node",
         ),
     )
@@ -862,13 +862,15 @@ def test_migrate_legacy_entity_remove_err() -> None:
     index = _index(
         InstanceRecord(
             guid="g",
-            instance_name="old-goal",
-            type_name="goal",
+            instance_name="old-milestone",
+            type_name="milestone",
             kind="node",
         ),
     )
     with patch("bellman.graph.sync.InstanceIndex.load", return_value=Ok(index)):
-        result = _migrate_legacy_node_ids(repo, Path("/tmp"), {"goal/old-goal"})
+        result = _migrate_legacy_node_ids(
+            repo, Path("/tmp"), {"milestone/old-milestone"}
+        )
     assert isinstance(result, Err)
 
 
@@ -878,13 +880,13 @@ def test_prune_stale_graph_registry_and_repair_errs() -> None:
     keep = InstanceRecord(
         guid="keep-guid",
         instance_name="keep",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     stale = InstanceRecord(
         guid="stale-guid",
         instance_name="stale",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     index = _index(keep, stale)
@@ -927,13 +929,13 @@ def test_prune_stale_graph_final_reload_err() -> None:
     keep = InstanceRecord(
         guid="keep-guid",
         instance_name="keep",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     stale = InstanceRecord(
         guid="stale-guid",
         instance_name="stale",
-        type_name="goal",
+        type_name="milestone",
         kind="node",
     )
     index = _index(keep, stale)
@@ -1004,7 +1006,7 @@ def test_prune_deleted_reconcile_and_index_err(tmp_path: Path) -> None:
             return_value=Err(_fits_err("reconcile")),
         ),
     ):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
 
     with (
@@ -1015,7 +1017,7 @@ def test_prune_deleted_reconcile_and_index_err(tmp_path: Path) -> None:
             return_value=Err(_history_err()),
         ),
     ):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "history_load_failed"
 
@@ -1031,7 +1033,7 @@ def test_parse_created_entity_errors(tmp_path: Path) -> None:
     from bellman import layout as layout_mod
 
     layout_mod.ensure_roadmap_dirs(layout_root)
-    result = _parse_created_entity(layout_root, "goal", "missing-goal")
+    result = _parse_created_entity(layout_root, "milestone", "missing-milestone")
     assert isinstance(result, Err)
 
 
@@ -1087,8 +1089,8 @@ def test_sync_renamed_entity_error_matrix(tmp_path: Path) -> None:
     index = _index(
         InstanceRecord(
             guid="g",
-            instance_name="goal/old",
-            type_name="goal",
+            instance_name="milestone/old",
+            type_name="milestone",
             kind="node",
         ),
     )
@@ -1096,7 +1098,7 @@ def test_sync_renamed_entity_error_matrix(tmp_path: Path) -> None:
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch("bellman.graph.sync.Repo.open", return_value=Err(_fits_err("open"))),
     ):
-        assert isinstance(sync_renamed_entity(tmp_path, "goal", "old", "new"), Err)
+        assert isinstance(sync_renamed_entity(tmp_path, "milestone", "old", "new"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
@@ -1106,7 +1108,7 @@ def test_sync_renamed_entity_error_matrix(tmp_path: Path) -> None:
             return_value=Err(_fits_err("boot")),
         ),
     ):
-        assert isinstance(sync_renamed_entity(tmp_path, "goal", "old", "new"), Err)
+        assert isinstance(sync_renamed_entity(tmp_path, "milestone", "old", "new"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
@@ -1117,7 +1119,7 @@ def test_sync_renamed_entity_error_matrix(tmp_path: Path) -> None:
             return_value=Err(_history_err()),
         ),
     ):
-        result = sync_renamed_entity(tmp_path, "goal", "old", "new")
+        result = sync_renamed_entity(tmp_path, "milestone", "old", "new")
     assert isinstance(result, Err)
     assert result.err_value.code == "history_load_failed"
 
@@ -1127,7 +1129,7 @@ def test_sync_renamed_entity_error_matrix(tmp_path: Path) -> None:
         patch("bellman.graph.sync._bootstrap_session", return_value=Ok(None)),
         patch("bellman.graph.sync.InstanceIndex.load", return_value=Ok(index)),
     ):
-        result = sync_renamed_entity(tmp_path, "goal", "old", "new")
+        result = sync_renamed_entity(tmp_path, "milestone", "old", "new")
     assert isinstance(result, Err)
     assert result.err_value.code == "rename"
 
@@ -1142,13 +1144,13 @@ def test_sync_renamed_legacy_and_resync(tmp_path: Path) -> None:
         InstanceRecord(
             guid="legacy",
             instance_name="old",
-            type_name="goal",
+            type_name="milestone",
             kind="node",
         ),
         InstanceRecord(
             guid="dash",
-            instance_name="goal--old",
-            type_name="goal",
+            instance_name="milestone--old",
+            type_name="milestone",
             kind="node",
         ),
     )
@@ -1160,16 +1162,16 @@ def test_sync_renamed_legacy_and_resync(tmp_path: Path) -> None:
         patch("bellman.graph.sync.sync_created_entity", return_value=Ok(None)),
         patch("bellman.graph.sync._validate_graph", return_value=Ok(None)),
     ):
-        result = sync_renamed_entity(tmp_path, "goal", "old", "new")
+        result = sync_renamed_entity(tmp_path, "milestone", "old", "new")
     assert isinstance(result, Ok)
 
 
 def test_sync_created_entity_error_matrix(tmp_path: Path) -> None:
     from bellman import layout as layout_mod
-    from bellman.model import Goal
+    from bellman.model import Milestone
 
     layout_mod.ensure_roadmap_dirs(tmp_path)
-    layout_mod.create_goal(tmp_path, "g1")
+    layout_mod.create_milestone(tmp_path, "g1")
     (tmp_path / ".fits").mkdir()
     repo = MagicMock()
     repo.__enter__.return_value = repo
@@ -1182,26 +1184,38 @@ def test_sync_created_entity_error_matrix(tmp_path: Path) -> None:
             return_value=Err(_fits_err("parse")),
         ),
     ):
-        assert isinstance(sync_created_entity(tmp_path, "goal", "g1"), Err)
+        assert isinstance(sync_created_entity(tmp_path, "milestone", "g1"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch(
             "bellman.graph.sync._parse_created_entity",
             return_value=Ok(
-                Goal(name="g1", title="G1", path="goals/g1.md", description="d")
+                Milestone(
+                    name="g1",
+                    title="G1",
+                    path="milestones/g1.md",
+                    date="2026-01-01",
+                    description="d",
+                )
             ),
         ),
         patch("bellman.graph.sync.Repo.open", return_value=Err(_fits_err("open"))),
     ):
-        assert isinstance(sync_created_entity(tmp_path, "goal", "g1"), Err)
+        assert isinstance(sync_created_entity(tmp_path, "milestone", "g1"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch(
             "bellman.graph.sync._parse_created_entity",
             return_value=Ok(
-                Goal(name="g1", title="G1", path="goals/g1.md", description="d")
+                Milestone(
+                    name="g1",
+                    title="G1",
+                    path="milestones/g1.md",
+                    date="2026-01-01",
+                    description="d",
+                )
             ),
         ),
         patch("bellman.graph.sync.Repo.open", return_value=Ok(repo)),
@@ -1210,14 +1224,20 @@ def test_sync_created_entity_error_matrix(tmp_path: Path) -> None:
             return_value=Err(_fits_err("boot")),
         ),
     ):
-        assert isinstance(sync_created_entity(tmp_path, "goal", "g1"), Err)
+        assert isinstance(sync_created_entity(tmp_path, "milestone", "g1"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch(
             "bellman.graph.sync._parse_created_entity",
             return_value=Ok(
-                Goal(name="g1", title="G1", path="goals/g1.md", description="d")
+                Milestone(
+                    name="g1",
+                    title="G1",
+                    path="milestones/g1.md",
+                    date="2026-01-01",
+                    description="d",
+                )
             ),
         ),
         patch("bellman.graph.sync.Repo.open", return_value=Ok(repo)),
@@ -1227,14 +1247,20 @@ def test_sync_created_entity_error_matrix(tmp_path: Path) -> None:
             return_value=Err(_fits_err("graph")),
         ),
     ):
-        assert isinstance(sync_created_entity(tmp_path, "goal", "g1"), Err)
+        assert isinstance(sync_created_entity(tmp_path, "milestone", "g1"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch(
             "bellman.graph.sync._parse_created_entity",
             return_value=Ok(
-                Goal(name="g1", title="G1", path="goals/g1.md", description="d")
+                Milestone(
+                    name="g1",
+                    title="G1",
+                    path="milestones/g1.md",
+                    date="2026-01-01",
+                    description="d",
+                )
             ),
         ),
         patch("bellman.graph.sync.Repo.open", return_value=Ok(repo)),
@@ -1248,14 +1274,20 @@ def test_sync_created_entity_error_matrix(tmp_path: Path) -> None:
             return_value=Err(_fits_err("ensure")),
         ),
     ):
-        assert isinstance(sync_created_entity(tmp_path, "goal", "g1"), Err)
+        assert isinstance(sync_created_entity(tmp_path, "milestone", "g1"), Err)
 
     with (
         patch("bellman.graph.sync.libfits_available", return_value=True),
         patch(
             "bellman.graph.sync._parse_created_entity",
             return_value=Ok(
-                Goal(name="g1", title="G1", path="goals/g1.md", description="d")
+                Milestone(
+                    name="g1",
+                    title="G1",
+                    path="milestones/g1.md",
+                    date="2026-01-01",
+                    description="d",
+                )
             ),
         ),
         patch("bellman.graph.sync.Repo.open", return_value=Ok(repo)),
@@ -1266,14 +1298,14 @@ def test_sync_created_entity_error_matrix(tmp_path: Path) -> None:
         ),
         patch(
             "bellman.graph.sync._ensure_node",
-            return_value=Ok(CreatedObject(guid=Id("g"), name="goal/g1")),
+            return_value=Ok(CreatedObject(guid=Id("g"), name="milestone/g1")),
         ),
         patch(
             "bellman.graph.sync._validate_graph",
             return_value=Err(_fits_err("validate")),
         ),
     ):
-        assert isinstance(sync_created_entity(tmp_path, "goal", "g1"), Err)
+        assert isinstance(sync_created_entity(tmp_path, "milestone", "g1"), Err)
 
 
 def test_ensure_node_already_present() -> None:
@@ -1281,8 +1313,8 @@ def test_ensure_node_already_present() -> None:
     index = _index(
         InstanceRecord(
             guid="g",
-            instance_name="goal/x",
-            type_name="goal",
+            instance_name="milestone/x",
+            type_name="milestone",
             kind="node",
         ),
     )
@@ -1291,8 +1323,8 @@ def test_ensure_node_already_present() -> None:
             repo,
             Path("/tmp"),
             Graph(nodes=(), edges=()),
-            type_name="goal",
-            logical_name="goal/x",
+            type_name="milestone",
+            logical_name="milestone/x",
             title="X",
         )
     assert isinstance(result, Ok)

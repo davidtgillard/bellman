@@ -21,7 +21,6 @@ from bellman.graph.desired import (
     DesiredNode,
     entity_node_id,
     flatten_wps,
-    goal_node_id,
     milestone_node_id,
     natural_name_from_node_id,
     scope_node_id,
@@ -38,7 +37,6 @@ EntityKind = Literal[
     "project",
     "work_package",
     "milestone",
-    "goal",
 ]
 """Kind of roadmap entity shown in a status inventory row."""
 
@@ -57,7 +55,6 @@ _SECTION_ORDER: tuple[EntityKind, ...] = (
     "project",
     "work_package",
     "milestone",
-    "goal",
 )
 _SECTION_TITLES: dict[EntityKind, str] = {
     "initiative": "Initiatives",
@@ -65,7 +62,6 @@ _SECTION_TITLES: dict[EntityKind, str] = {
     "project": "Projects",
     "work_package": "Work packages",
     "milestone": "Milestones",
-    "goal": "Goals",
 }
 
 
@@ -382,8 +378,6 @@ def _path_key_map(root: Path, roadmap: Roadmap) -> dict[str, str]:
         mapping[_normalize_path(milestone.path)] = _entity_key(
             "milestone", milestone.name
         )
-    for goal in roadmap.goals:
-        mapping[_normalize_path(goal.path)] = _entity_key("goal", goal.name)
     return mapping
 
 
@@ -456,8 +450,6 @@ def _infer_entity_from_path(root: Path, path_str: str) -> tuple[EntityKind, str]
         and parts[1].endswith(".md")
     ):
         return "milestone", Path(parts[1]).stem
-    if len(parts) == 2 and parts[0] == layout.GOALS_DIR and parts[1].endswith(".md"):
-        return "goal", Path(parts[1]).stem
     return None
 
 
@@ -547,13 +539,6 @@ def _build_entities(
             path=milestone.path,
             node=DesiredNode("milestone", milestone_node_id(milestone.name)),
         )
-    for goal in roadmap.goals:
-        add(
-            kind="goal",
-            name=goal.name,
-            path=goal.path,
-            node=DesiredNode("goal", goal_node_id(goal.name)),
-        )
 
     for err in load_errors:
         inferred = _infer_entity_from_path(root, err.path)
@@ -581,7 +566,7 @@ def _node_for_kind_name(kind: EntityKind, name: str) -> DesiredNode | None:
         return DesiredNode("work_package", wp_node_id(project_name, slug))
     if kind == "milestone":
         return DesiredNode("milestone", milestone_node_id(name))
-    return DesiredNode("goal", goal_node_id(name))
+    return None
 
 
 def _apply_registry(
@@ -657,7 +642,8 @@ def _kind_from_desired_node(node: DesiredNode) -> EntityKind:
         return "project"
     if node.type_name == "milestone":
         return "milestone"
-    return "goal"
+    msg = f"unexpected node type {node.type_name!r}"
+    raise ValueError(msg)
 
 
 def _display_name_for_node(node: DesiredNode) -> str:

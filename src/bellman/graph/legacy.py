@@ -8,15 +8,15 @@ from bellman.graph.desired import DesiredNode
 from bellman.graph.registry import bellman_node_types
 
 _KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-_DASH_QUALIFIED_PREFIXES = ("initiative--", "project--", "goal--", "milestone--")
-_SLASH_QUALIFIED_PREFIXES = ("initiative/", "project/", "goal/", "milestone/")
+_DASH_QUALIFIED_PREFIXES = ("initiative--", "project--", "milestone--")
+_SLASH_QUALIFIED_PREFIXES = ("initiative/", "project/", "milestone/")
 
 
 def is_legacy_flat_node_id(type_name: str, instance_name: str) -> bool:
     """Return True when ``instance_name`` uses the pre-migration bare kebab scheme.
 
     Args:
-        type_name: Bellman node type from the registry (e.g. ``goal``).
+        type_name: Bellman node type from the registry (e.g. ``milestone``).
         instance_name: Human instance name stored in ``registry.json``.
 
     Returns:

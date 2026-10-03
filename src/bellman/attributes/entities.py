@@ -20,8 +20,7 @@ class EntityRef:
     """A roadmap entity together with its attribute assignments.
 
     Attributes:
-        kind: ``initiative``, ``project``, ``work_package``, ``milestone``, or
-            ``goal``.
+        kind: ``initiative``, ``project``, ``work_package``, or ``milestone``.
         name: Natural name; work packages use ``{project}/{slug}``.
         path: Source path for error reporting.
         classifications: Assignments in document order.
@@ -68,8 +67,7 @@ def iter_entities(roadmap: Roadmap, kind: str | None = None) -> Iterator[EntityR
     """Iterate every loaded entity that can carry attribute assignments.
 
     Covers live initiatives, projects and their work packages (nested ones
-    included), milestones, goals, and archived initiatives that have no live
-    project.
+    included), milestones, and archived initiatives that have no live project.
 
     Args:
         roadmap: Loaded roadmap.
@@ -100,8 +98,6 @@ def iter_entities(roadmap: Roadmap, kind: str | None = None) -> Iterator[EntityR
                 "milestone", milestone.name, milestone.path, milestone.classifications
             )
         )
-    for goal in roadmap.goals:
-        refs.append(EntityRef("goal", goal.name, goal.path, goal.classifications))
     for ref in refs:
         if kind is None or ref.kind == kind:
             yield ref

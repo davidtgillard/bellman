@@ -19,9 +19,15 @@ from bellman.graph.desired import (
 )
 from bellman.graph.identity import InstanceIndex
 from bellman.graph.legacy import registry_needs_id_migration
-from bellman.graph.registry import bellman_link_types, bellman_node_types
+from bellman.graph.registry import KIND_TYPE, bellman_link_types, bellman_node_types
 from bellman.graph.sync import libfits_available
 from bellman.model import Roadmap
+
+# Retired graph objects. Sync prepare deletes them; until then validate and
+# status report them as extras so the registry is not treated as aligned.
+_OBSOLETE_NODE_TYPES = frozenset({"goal"})
+_OBSOLETE_KIND_ROOT_NAMES = frozenset({"goal"})
+_OBSOLETE_LINK_TYPES = frozenset({"supports", "supports_wp"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,9 +43,9 @@ class RegistryDelta:
         missing_node_ids: Structured nodes present in git but missing from registry.
         extra_node_ids: Structured nodes present in registry but missing from git.
         desired_node_count: Count of nodes implied by markdown.
-        actual_node_count: Count of bellman nodes in the registry.
+        actual_node_count: Bellman nodes plus retired goal nodes and the goal kind-root.
         desired_link_count: Count of links implied by markdown.
-        actual_link_count: Count of bellman links in the registry.
+        actual_link_count: Bellman links plus retired supports and supports_wp links.
     """
 
     missing_nodes: tuple[str, ...]
@@ -93,16 +99,36 @@ def _format_link(link: DesiredLink) -> str:
     return f"{link.link_type} {link.from_id} -> {link.to_id}"
 
 
-def _actual_nodes(root: Path) -> Result[set[DesiredNode], RegistryDeltaError]:
+def _obsolete_node_lines(index: InstanceIndex) -> tuple[str, ...]:
+    """Format retired goal nodes and the goal kind-root as extra-node lines."""
+    lines: list[str] = []
+    for logical_name, inst in index.by_name.items():
+        if inst.kind != "node":
+            continue
+        retired_node = inst.type_name in _OBSOLETE_NODE_TYPES
+        retired_root = (
+            inst.type_name == KIND_TYPE
+            and inst.instance_name in _OBSOLETE_KIND_ROOT_NAMES
+        )
+        if not retired_node and not retired_root:
+            continue
+        lines.append(_format_node(DesiredNode(inst.type_name, logical_name)))
+    return tuple(sorted(lines))
+
+
+def _actual_nodes(
+    root: Path,
+) -> Result[tuple[set[DesiredNode], tuple[str, ...]], RegistryDeltaError]:
     index_result = InstanceIndex.load(root)
     if isinstance(index_result, Err):
         return Err(RegistryDeltaError(index_result.err_value.format()))
+    index = index_result.ok_value
     nodes = {
         DesiredNode(inst.type_name, logical_name)
-        for logical_name, inst in index_result.ok_value.by_name.items()
+        for logical_name, inst in index.by_name.items()
         if inst.kind == "node" and inst.type_name in bellman_node_types()
     }
-    return Ok(nodes)
+    return Ok((nodes, _obsolete_node_lines(index)))
 
 
 def _actual_links(
@@ -125,7 +151,8 @@ def _actual_links(
     managed = bellman_link_types()
     links: set[DesiredLink] = set()
     for edge in graph.edges:
-        if edge.link_type not in managed:
+        obsolete = edge.link_type in _OBSOLETE_LINK_TYPES
+        if edge.link_type not in managed and not obsolete:
             continue
         desired = desired_link_from_graph_edge(
             link_type=edge.link_type,
@@ -135,6 +162,15 @@ def _actual_links(
         )
         if desired is not None:
             links.add(desired)
+            continue
+        if obsolete:
+            links.add(
+                DesiredLink(
+                    edge.link_type,
+                    edge.to_id.value,
+                    edge.from_id.value,
+                )
+            )
     return Ok(links)
 
 
@@ -143,6 +179,9 @@ def compute_registry_delta(
     roadmap: Roadmap,
 ) -> Result[RegistryDelta, RegistryDeltaError | FitsError]:
     """Compare ``roadmap`` markdown to the live registry at ``root``.
+
+    Retired ``goal`` nodes, the ``goal`` kind-root, and ``supports`` /
+    ``supports_wp`` links are included as extras. Sync removes them.
 
     Args:
         root: Roadmap root directory with an initialized ``.fits/`` tree.
@@ -168,7 +207,7 @@ def compute_registry_delta(
     actual_nodes_result = _actual_nodes(root)
     if isinstance(actual_nodes_result, Err):
         return actual_nodes_result
-    actual_node_set = actual_nodes_result.ok_value
+    actual_node_set, obsolete_nodes = actual_nodes_result.ok_value
 
     actual_links_result = _actual_links(root)
     if isinstance(actual_links_result, Err):
@@ -181,7 +220,9 @@ def compute_registry_delta(
     extra_link_set = actual_link_set - desired_link_set
 
     missing_nodes = tuple(sorted(_format_node(node) for node in missing_node_set))
-    extra_nodes = tuple(sorted(_format_node(node) for node in extra_node_set))
+    extra_nodes = tuple(
+        sorted({_format_node(node) for node in extra_node_set} | set(obsolete_nodes))
+    )
     missing_links = tuple(sorted(_format_link(link) for link in missing_link_set))
     extra_links = tuple(sorted(_format_link(link) for link in extra_link_set))
 
@@ -197,7 +238,7 @@ def compute_registry_delta(
             missing_node_ids=frozenset(missing_node_set),
             extra_node_ids=frozenset(extra_node_set),
             desired_node_count=len(desired_node_set),
-            actual_node_count=len(actual_node_set),
+            actual_node_count=len(actual_node_set) + len(obsolete_nodes),
             desired_link_count=len(desired_link_set),
             actual_link_count=len(actual_link_set),
         )

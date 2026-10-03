@@ -45,7 +45,7 @@ PROGRAM_JSONC = """{
 BUDGET_JSONC = """{
   "name": "budget",
   "version": "1.0",
-  "applies_to": ["project", "milestone", "goal"],
+  "applies_to": ["project", "milestone"],
   "cardinality": "one",
   "value_schema": { "type": "number", "minimum": 0 }
 }
@@ -118,22 +118,6 @@ def write_project(
     if work_packages is not None:
         (pdir / "work-packages.yaml").write_text(work_packages, encoding="utf-8")
     return md
-
-
-def write_goal(
-    root: Path,
-    name: str,
-    classifications: list[str] | None = None,
-) -> Path:
-    """Write a goal with optional classification bullets."""
-    title = name.replace("-", " ").title()
-    path = root / layout.GOALS_DIR / f"{name}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"# {title}\n\nKeep it low.\n" + classifications_section(classifications),
-        encoding="utf-8",
-    )
-    return path
 
 
 def write_milestone(

@@ -63,17 +63,17 @@ def _needs_legacy_root_scope_migration(data: dict[str, Any]) -> bool:
     if not isinstance(node_types, list):
         return False
     has_kind = False
-    has_legacy_goal = False
+    has_legacy_milestone = False
     for entry in node_types:
         if not isinstance(entry, dict):
             continue
         if entry.get("type") == KIND_TYPE:
             has_kind = True
-        if entry.get("type") == "goal":
+        if entry.get("type") == "milestone":
             if entry.get("container_node") == KIND_TYPE:
                 return False
-            has_legacy_goal = True
-    return has_legacy_goal and not has_kind
+            has_legacy_milestone = True
+    return has_legacy_milestone and not has_kind
 
 
 def registry_needs_work_scope_parent_migration(root: Path) -> bool:
@@ -252,89 +252,186 @@ def is_kind_root_name(logical_name: str) -> bool:
     return logical_name in KIND_ROOT_NAMES
 
 
-_OBSOLETE_LINK_TYPES = frozenset({"promoted_from"})
+_OBSOLETE_LINK_TYPES = frozenset({"promoted_from", "supports", "supports_wp"})
+_OBSOLETE_NODE_TYPES = frozenset({"goal"})
+_OBSOLETE_KIND_ROOT_NAMES = frozenset({"goal"})
+
+
+def _is_obsolete_node_instance(inst: dict[str, Any]) -> bool:
+    """Return True when ``inst`` is a retired goal node or goal kind-root."""
+    if inst.get("kind") != "node":
+        return False
+    type_name = inst.get("type")
+    if type_name in _OBSOLETE_NODE_TYPES:
+        return True
+    return type_name == KIND_TYPE and inst.get("name") in _OBSOLETE_KIND_ROOT_NAMES
+
+
+def _drop_obsolete_goal_subgraphs(
+    root: Path, kind_root_guids: set[str]
+) -> Result[set[str], FitsError]:
+    """Delete goal kind-root subgraphs and strip retired links from the rest.
+
+    Args:
+        root: Roadmap root directory.
+        kind_root_guids: Child GUIDs of removed ``goal`` kind-root instances.
+
+    Returns:
+        ``Ok(guids)`` of retired links removed from surviving subgraph files.
+        ``Err(FitsError)`` when a retired subgraph directory cannot be removed.
+    """
+    removed: set[str] = set()
+    nodes_dir = root / "nodes"
+    if not nodes_dir.is_dir():
+        return Ok(removed)
+    obsolete_dirs: list[Path] = []
+    for sub_path in nodes_dir.rglob("subgraph.jsonc"):
+        try:
+            document = json.loads(sub_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(document, dict):
+            continue
+        container = sub_path.parent.parent
+        parent = document.get("parent_guid")
+        if container.name == "goal goal" or (
+            isinstance(parent, str) and parent in kind_root_guids
+        ):
+            obsolete_dirs.append(container)
+            continue
+        links = document.get("links")
+        if not isinstance(links, list):
+            continue
+        kept: list[Any] = []
+        changed_links = False
+        for link in links:
+            if isinstance(link, dict) and link.get("link_type") in _OBSOLETE_LINK_TYPES:
+                guid = link.get("guid")
+                if isinstance(guid, str):
+                    removed.add(guid)
+                changed_links = True
+                continue
+            kept.append(link)
+        if not changed_links:
+            continue
+        document["links"] = kept
+        try:
+            sub_path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            continue
+    for directory in obsolete_dirs:
+        if not directory.is_dir():
+            continue
+        try:
+            shutil.rmtree(directory)
+        except OSError as exc:
+            return Err(FitsError(str(exc), code="schema_migration_failed"))
+    return Ok(removed)
 
 
 def remove_obsolete_link_types(root: Path) -> Result[set[str], FitsError]:
-    """Drop retired link types and instances from the registry file.
+    """Drop retired link and goal types from the registry file.
 
-    Removes ``promoted_from`` nested/root link type rows and matching live
-    link instances. Call before opening a long-lived repo session; pass
-    returned GUIDs to ``reconcile_link_artifacts`` so subgraph and
-    ``links.jsonc`` rows are dropped.
+    Removes ``promoted_from``, ``supports``, and ``supports_wp`` link types and
+    instances, plus the ``goal`` node type, live goal nodes, and the ``goal``
+    kind-root. Call before opening a long-lived repo session; pass returned
+    GUIDs to ``reconcile_link_artifacts`` so subgraph and ``links.jsonc`` rows
+    are dropped.
 
     Args:
         root: Roadmap root directory.
 
     Returns:
         ``Ok(guids)`` with child GUIDs of removed link instances (possibly empty).
-        ``Err(FitsError)`` when the registry cannot be read or written.
+        ``Err(FitsError)`` when the registry cannot be read or written, or a
+        retired goal subgraph directory cannot be removed.
     """
     path = root / _REGISTRY_PATH
-    if not path.is_file():
-        return Ok(set())
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return Err(FitsError(str(exc), code="schema_migration_failed"))
-    if not isinstance(data, dict):
-        return Ok(set())
-
     stale_guids: set[str] = set()
-    changed = False
-    instances = data.get("instances")
-    if isinstance(instances, list):
-        kept_instances: list[Any] = []
-        for inst in instances:
-            if not isinstance(inst, dict):
-                kept_instances.append(inst)
-                continue
-            type_name = inst.get("type")
-            guid = inst.get("guid")
-            if (
-                inst.get("kind") == "link"
-                and type_name in _OBSOLETE_LINK_TYPES
-                and isinstance(guid, str)
-            ):
-                stale_guids.add(guid)
-                continue
-            kept_instances.append(inst)
-        if len(kept_instances) != len(instances):
-            data["instances"] = kept_instances
-            changed = True
-
-    nested = data.get("nested_link_types")
-    if isinstance(nested, list):
-        filtered = [
-            entry
-            for entry in nested
-            if not (
-                isinstance(entry, dict)
-                and entry.get("link_type") in _OBSOLETE_LINK_TYPES
-            )
-        ]
-        if len(filtered) != len(nested):
-            data["nested_link_types"] = filtered
-            changed = True
-
-    root_links = data.get("link_types")
-    if isinstance(root_links, list):
-        filtered_root = [
-            entry
-            for entry in root_links
-            if not (
-                isinstance(entry, dict)
-                and entry.get("link_type") in _OBSOLETE_LINK_TYPES
-            )
-        ]
-        if len(filtered_root) != len(root_links):
-            data["link_types"] = filtered_root
-            changed = True
-
-    if changed:
+    kind_root_guids: set[str] = set()
+    if path.is_file():
         try:
-            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        except OSError as exc:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
             return Err(FitsError(str(exc), code="schema_migration_failed"))
+        if isinstance(data, dict):
+            changed = False
+            instances = data.get("instances")
+            if isinstance(instances, list):
+                kept_instances: list[Any] = []
+                for inst in instances:
+                    if not isinstance(inst, dict):
+                        kept_instances.append(inst)
+                        continue
+                    type_name = inst.get("type")
+                    guid = inst.get("guid")
+                    if _is_obsolete_node_instance(inst):
+                        if type_name == KIND_TYPE and isinstance(guid, str):
+                            kind_root_guids.add(guid)
+                        changed = True
+                        continue
+                    if (
+                        inst.get("kind") == "link"
+                        and type_name in _OBSOLETE_LINK_TYPES
+                        and isinstance(guid, str)
+                    ):
+                        stale_guids.add(guid)
+                        continue
+                    kept_instances.append(inst)
+                if len(kept_instances) != len(instances):
+                    data["instances"] = kept_instances
+                    changed = True
 
+            node_types = data.get("node_types")
+            if isinstance(node_types, list):
+                filtered_types = [
+                    entry
+                    for entry in node_types
+                    if not (
+                        isinstance(entry, dict)
+                        and entry.get("type") in _OBSOLETE_NODE_TYPES
+                    )
+                ]
+                if len(filtered_types) != len(node_types):
+                    data["node_types"] = filtered_types
+                    changed = True
+
+            nested = data.get("nested_link_types")
+            if isinstance(nested, list):
+                filtered = [
+                    entry
+                    for entry in nested
+                    if not (
+                        isinstance(entry, dict)
+                        and entry.get("link_type") in _OBSOLETE_LINK_TYPES
+                    )
+                ]
+                if len(filtered) != len(nested):
+                    data["nested_link_types"] = filtered
+                    changed = True
+
+            root_links = data.get("link_types")
+            if isinstance(root_links, list):
+                filtered_root = [
+                    entry
+                    for entry in root_links
+                    if not (
+                        isinstance(entry, dict)
+                        and entry.get("link_type") in _OBSOLETE_LINK_TYPES
+                    )
+                ]
+                if len(filtered_root) != len(root_links):
+                    data["link_types"] = filtered_root
+                    changed = True
+
+            if changed:
+                try:
+                    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+                except OSError as exc:
+                    return Err(FitsError(str(exc), code="schema_migration_failed"))
+
+    dropped = _drop_obsolete_goal_subgraphs(root, kind_root_guids)
+    if isinstance(dropped, Err):
+        return dropped
+    stale_guids |= dropped.ok_value
     return Ok(stale_guids)

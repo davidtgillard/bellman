@@ -9,7 +9,6 @@ from attr_support import (
     make_root,
     wp_block,
     wp_yaml,
-    write_goal,
     write_initiative,
     write_milestone,
     write_project,
@@ -211,7 +210,6 @@ def test_entities_load_classifications(tmp_path: Path) -> None:
         ),
     )
     write_milestone(root, "ga", ["priority: P0"])
-    write_goal(root, "less-churn", ["priority: P1"])
     roadmap = load(root)
 
     alpha = roadmap.initiative_by_name("alpha")
@@ -236,24 +234,6 @@ def test_entities_load_classifications(tmp_path: Path) -> None:
     assert milestone is not None
     assert milestone.classifications == (AttributeAssignment("priority", "P0"),)
     assert milestone.description == "Ship."
-
-
-def test_goal_description_excludes_classifications(tmp_path: Path) -> None:
-    root = make_root(tmp_path)
-    write_goal(root, "less-churn", ["priority: P1"])
-    goal = load(root).goal_by_name("less-churn")
-    assert goal is not None
-    assert goal.description == "Keep it low."
-    assert goal.classifications == (AttributeAssignment("priority", "P1"),)
-
-
-def test_goal_without_section_has_no_classifications(tmp_path: Path) -> None:
-    root = make_root(tmp_path)
-    write_goal(root, "plain")
-    goal = load(root).goal_by_name("plain")
-    assert goal is not None
-    assert goal.classifications == ()
-    assert goal.description == "Keep it low."
 
 
 def test_bad_classification_line_is_a_load_error(tmp_path: Path) -> None:

@@ -31,7 +31,7 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": {
-        "enum": ["initiative", "project", "work_package", "milestone", "goal"]
+        "enum": ["initiative", "project", "work_package", "milestone"]
       },
       "description": "Entity kinds that may carry this attribute."
     },

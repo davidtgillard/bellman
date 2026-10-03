@@ -192,6 +192,6 @@ def test_prune_deleted_entity_unknown_kind(tmp_path: Path) -> None:
 
 def test_prune_deleted_entity_libfits_unavailable(tmp_path: Path) -> None:
     with patch("bellman.graph.sync.libfits_available", return_value=False):
-        result = prune_deleted_entity(tmp_path, "goal", "x")
+        result = prune_deleted_entity(tmp_path, "milestone", "x")
     assert isinstance(result, Err)
     assert result.err_value.code == "lib_not_found"

@@ -20,12 +20,6 @@ def test_example_roadmap_validates() -> None:
     assert result.warnings == ()
 
 
-def _write_goal(root: Path, name: str, content: str) -> None:
-    goal_dir = root / "goals"
-    goal_dir.mkdir(parents=True, exist_ok=True)
-    (goal_dir / f"{name}.md").write_text(content, encoding="utf-8")
-
-
 def _write_project_with_wp(root: Path, wp_content: str) -> None:
     project_dir = root / "projects" / "billing-redesign"
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -39,33 +33,6 @@ def _write_project_with_wp(root: Path, wp_content: str) -> None:
         encoding="utf-8",
     )
     (project_dir / "work-packages.yaml").write_text(wp_content, encoding="utf-8")
-
-
-def test_goal_header_must_match_name(tmp_path: Path) -> None:
-    _write_goal(tmp_path, "reduce-churn", "# Wrong Title\n\nSome content.\n")
-    roadmap = load(tmp_path)
-    result = validate_roadmap(roadmap)
-    assert any("does not match name" in e.message for e in result.errors)
-
-
-def test_goal_header_match_is_case_insensitive(tmp_path: Path) -> None:
-    _write_goal(tmp_path, "reduce-churn", "# REDUCE CHURN\n\nSome content.\n")
-    roadmap = load(tmp_path)
-    result = validate_roadmap(roadmap)
-    assert result.errors == ()
-
-
-def test_goal_requires_content_beneath_header(tmp_path: Path) -> None:
-    _write_goal(tmp_path, "reduce-churn", "# Reduce Churn\n\n")
-    roadmap = load(tmp_path)
-    result = validate_roadmap(roadmap)
-    assert any("missing content beneath header" in e.message for e in result.errors)
-
-
-def test_goal_missing_header_fails_at_load(tmp_path: Path) -> None:
-    _write_goal(tmp_path, "reduce-churn", "No heading here.\n")
-    with pytest.raises(ValueError, match="missing top-level header"):
-        load(tmp_path)
 
 
 def test_unknown_estimate_warns(tmp_path: Path) -> None:
@@ -336,26 +303,6 @@ def test_milestone_placeholder_date(tmp_path: Path) -> None:
     assert any("YYYY-MM-DD" in e.message for e in result.errors)
 
 
-def test_goal_title_slugify_failure(tmp_path: Path) -> None:
-    from dataclasses import replace
-
-    from bellman.model import Goal
-
-    roadmap = load(tmp_path) if (tmp_path / "goals").exists() else None
-    layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "ok-goal", "# Ok Goal\n\nBody.\n")
-    roadmap = load(tmp_path)
-    bad_goal = Goal(
-        name="ok-goal",
-        title="!!!",
-        path=str(tmp_path / "goals" / "ok-goal.md"),
-        description="Body.",
-    )
-    roadmap = replace(roadmap, goals=(bad_goal,))
-    result = validate_roadmap(roadmap)
-    assert any("does not match name" in e.message for e in result.errors)
-
-
 def test_qualified_unknown_wp_dependency(tmp_path: Path) -> None:
     _write_project_with_wp(
         tmp_path,
@@ -372,29 +319,10 @@ def test_qualified_unknown_wp_dependency(tmp_path: Path) -> None:
     assert any("unknown dependency" in e.message for e in result.errors)
 
 
-def test_goal_empty_title(tmp_path: Path) -> None:
-    from dataclasses import replace
-
-    from bellman.model import Goal
-
-    layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "ok-goal", "# Ok Goal\n\nBody.\n")
-    roadmap = load(tmp_path)
-    bad = Goal(
-        name="ok-goal",
-        title="   ",
-        path=str(tmp_path / "goals" / "ok-goal.md"),
-        description="Body.",
-    )
-    roadmap = replace(roadmap, goals=(bad,))
-    result = validate_roadmap(roadmap)
-    assert any("missing top-level header" in e.message for e in result.errors)
-
-
 def test_ambiguous_dependency_ref(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     layout.create_initiative(tmp_path, "shared")
-    layout.create_goal(tmp_path, "shared")
+    layout.create_milestone(tmp_path, "shared")
     layout.create_initiative(tmp_path, "follower")
     path = layout.initiative_path(tmp_path, "follower")
     path.write_text(
@@ -406,7 +334,4 @@ def test_ambiguous_dependency_ref(tmp_path: Path) -> None:
     )
     roadmap = load(tmp_path)
     result = validate_roadmap(roadmap)
-    assert any(
-        "ambiguous" in e.message or "unknown dependency" in e.message
-        for e in result.errors
-    )
+    assert any("ambiguous" in e.message for e in result.errors)

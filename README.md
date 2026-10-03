@@ -64,7 +64,7 @@ State (last check time, installed asset id) is stored in `.bellman/bellman-state
 
 ## About
 
-Bellman defines a roadmap as initiatives, projects, work packages, milestones, and goals. Human-edited markdown is the source of truth; a pyfits graph is derived for validation and future tooling.
+Bellman defines a roadmap as initiatives, projects, work packages, and milestones. Outcomes are a roadmap attribute (`attributes/goal.jsonc`), not graph nodes. Human-edited markdown is the source of truth; a pyfits graph is derived for validation and future tooling.
 
 ## Roadmap layout
 
@@ -75,7 +75,6 @@ projects/             # one folder per project
     {name}.md
     work-packages.yaml
 milestones/
-goals/
 attributes/           # one {name}.jsonc per attribute definition (optional)
 validator/            # optional Python validators (see Attributes)
 ```
@@ -93,7 +92,6 @@ bellman init
 bellman create initiative explore-ml-ranking
 bellman create project billing-redesign
 bellman create milestone ga-release
-bellman create goal reduce-churn
 bellman promote billing-redesign   # after creating as initiative
 bellman promote initiatives/billing-redesign
 bellman demote billing-redesign    # park the project folder; restore the initiative
@@ -109,11 +107,11 @@ bellman status --no-registry
 bellman sync
 bellman version
 bellman update --check
-bellman delete my-goal
-bellman delete goals/my-goal.md
+bellman delete my-milestone
+bellman delete milestones/my-milestone.md
 bellman rename old-name new-name
 bellman rename projects/old-proj new-proj
-bellman rename goal system-mci renamed-goal   # when names collide across types
+bellman rename milestone system-mci renamed-milestone   # when names collide across types
 bellman plugin list
 bellman plugin my-plugin
 bellman report wbs tree --project billing-redesign   # PERT tree to stdout
@@ -125,13 +123,13 @@ bellman estimate billing-redesign                    # Monte Carlo effort and du
 bellman estimate billing-redesign --json --seed 1 --num-people 2
 ```
 
-`validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a goal added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `status` inventories every entity with markdown health and registry alignment without modifying files (exit 0 unless the command itself fails). `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
+`validate` checks markdown in git and, by default, reports differences between those files and the pyfits registry (for example a milestone added by hand without `bellman create`). Use `--no-registry` to skip registry comparison. `status` inventories every entity with markdown health and registry alignment without modifying files (exit 0 unless the command itself fails). `sync` runs the same markdown validation first, then updates the registry from git and prunes stale graph objects.
 
 `create`, `delete`, `rename`, `promote`, and `demote` update the pyfits graph and `.fits/registry.json` directly when libfits is installed. Run `bellman init` first; `sync` will not bootstrap pyfits artifacts. If graph sync fails after a markdown change, the command exits with code 1; the markdown file is still written. When libfits is not available, those commands only change markdown and print a note. `delete` also prunes the removed entity from the graph; use `bellman sync` to reconcile other manual edits.
 
 `demote` parks the whole project directory as `projects/{name}.archived/` (work packages and extra files included) and restores `initiatives/{name}.md`. A later `promote` of the same name restores that folder instead of creating an empty one. Promote and demote keep the same pyfits GUID and flip `instances[].type`; git history of `.fits/registry.json` is the type change.
 
-`rename` moves the entity on disk (initiative, project, milestone, or goal), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Entity-targeting commands (`promote`, `demote`, `delete`, `rename`, `report deps`, `report wbs --project`) accept a bare name when it is unambiguous across types, a layout FQN such as `projects/foo` or `initiatives/foo`, a folder path (`projects/foo`), or the main markdown path (`projects/foo/foo.md`, `goals/foo.md`). Graph FQNs (`project/foo`, `goal/foo`) work as well. Use a type subcommand when initiative and goal (for example) share a name: `bellman rename goal foo bar`.
+`rename` moves the entity on disk (initiative, project, or milestone), rewrites dependency references that name the old entity, and renames the matching pyfits instance (GUID preserved). Entity-targeting commands (`promote`, `demote`, `delete`, `rename`, `report deps`, `report wbs --project`) accept a bare name when it is unambiguous across types, a layout FQN such as `projects/foo` or `initiatives/foo`, a folder path (`projects/foo`), or the main markdown path (`projects/foo/foo.md`, `milestones/foo.md`). Graph FQNs (`project/foo`, `milestone/foo`) work as well. Use a type subcommand when an initiative and a milestone share a name: `bellman rename milestone foo bar`.
 
 ## Precedence dependencies
 
@@ -172,7 +170,7 @@ With the defaults (`N = 1`), duration equals effort. Use `--json` for a machine-
 
 ## Attributes
 
-Attributes classify initiatives, projects, work packages, milestones, and goals with a name, a value, and optional data, without adding new entity types. Examples: a `priority` with fixed values, or a `program` that tags the work behind a large speculative scope and carries its own data. Attributes live only in bellman; they are not written to the pyfits graph.
+Attributes classify initiatives, projects, work packages, and milestones with a name, a value, and optional data, without adding new entity types. Examples: a `priority` with fixed values, a `program` that tags the work behind a large speculative scope and carries its own data, or a `goal` whose catalog lives in `attributes/goal.jsonc` and is assigned on the work that serves it (`- goal: reduce-churn`). Attributes live only in bellman; they are not written to the pyfits graph. Rename a catalog value with `bellman attribute rename`.
 
 ### Defining an attribute
 
@@ -184,7 +182,7 @@ Each attribute is one JSONC file (JSON with `//` and `/* */` comments and traili
   "name": "program",                    // must match the file name
   "version": "1.2",                     // x.y contract version, maintained by you (see Versions)
   "description": "Speculative work scope", // optional
-  "applies_to": ["initiative", "project", "work_package"], // initiative, project, work_package, milestone, goal
+  "applies_to": ["initiative", "project", "work_package"], // initiative, project, work_package, milestone
   "cardinality": "many",                // "one": at most one assignment per entity; "many": any number
   "required": false,                    // true: every entity of an applicable kind needs this attribute
   "values": {                           // keyed values, each with its own data (see shapes below)
@@ -212,17 +210,18 @@ The shape of `values` picks one of three kinds of attribute:
 | an object keyed by token | keyed values: assignments use a key; each key carries data | optional, checks every entry |
 | omitted | open: any value that matches the schema | required |
 
-Tokens and keys start with a letter or digit and contain only letters, digits, `.`, `_` and `-`. For open attributes a value written in markdown (`budget: 12`) is read as a number or boolean when it looks like one before it is checked against `value_schema`. In markdown a value is a single token, so open attributes with object values can only be assigned on work packages (in `work-packages.yaml`); initiatives, projects, milestones and goals can use scalar open values. `assignment_schema` describes the optional per-assignment data (`[allocation: 0.5]`); data on an attribute without `assignment_schema` is rejected. bellman ships the JSON Schema for definition files (`attribute-definition-1.0.json`) and checks every file against it, then applies further checks (name matches file, embedded schemas are valid, keyed entries satisfy `value_schema`).
+Tokens and keys start with a letter or digit and contain only letters, digits, `.`, `_` and `-`. For open attributes a value written in markdown (`budget: 12`) is read as a number or boolean when it looks like one before it is checked against `value_schema`. In markdown a value is a single token, so open attributes with object values can only be assigned on work packages (in `work-packages.yaml`); initiatives, projects, and milestones can use scalar open values. `assignment_schema` describes the optional per-assignment data (`[allocation: 0.5]`); data on an attribute without `assignment_schema` is rejected. bellman ships the JSON Schema for definition files (`attribute-definition-1.0.json`) and checks every file against it, then applies further checks (name matches file, embedded schemas are valid, keyed entries satisfy `value_schema`).
 
 ### Assigning attributes
 
-Initiatives, projects, milestones, and goals use an optional `## Classifications` section:
+Initiatives, projects, and milestones use an optional `## Classifications` section:
 
 ```markdown
 ## Classifications
 
 - priority: P1
 - program@1.2: platform-v2 [allocation: 0.5]
+- goal: reduce-churn
 ```
 
 The form is `- <name>[@x.y]: <value> [key: value, ...]`. Work packages use a `classifications` mapping in `work-packages.yaml`:

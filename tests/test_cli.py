@@ -35,14 +35,13 @@ def test_init_and_create(tmp_path: Path) -> None:
     assert (tmp_path / "initiatives" / "my-init.md").is_file()
 
 
-def test_create_project_milestone_goal(tmp_path: Path) -> None:
+def test_create_project_and_milestone(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     (tmp_path / ".fits").mkdir()
     with patch("bellman.cli.libfits_available", return_value=False):
         for kind, name in (
             ("project", "demo-proj"),
             ("milestone", "m1"),
-            ("goal", "g1"),
         ):
             result = runner.invoke(
                 app,
@@ -52,7 +51,6 @@ def test_create_project_milestone_goal(tmp_path: Path) -> None:
             assert "Created" in result.output
     assert layout.project_dir(tmp_path, "demo-proj").is_dir()
     assert layout.milestone_path(tmp_path, "m1").is_file()
-    assert layout.goal_path(tmp_path, "g1").is_file()
 
 
 def test_create_duplicate_exits_1(tmp_path: Path) -> None:
@@ -134,7 +132,7 @@ def test_create_without_roadmap_root(tmp_path: Path) -> None:
     empty.mkdir()
     result = runner.invoke(
         app,
-        ["create", "goal", "g", "--path", str(empty)],
+        ["create", "milestone", "g", "--path", str(empty)],
     )
     assert result.exit_code == 1
     assert "no initialized bellman roadmap" in result.output
@@ -153,19 +151,17 @@ def test_create_project_duplicate(tmp_path: Path) -> None:
     assert "already exists" in result.output
 
 
-def test_create_milestone_and_goal_duplicate(tmp_path: Path) -> None:
+def test_create_milestone_duplicate(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     (tmp_path / ".fits").mkdir()
     layout.create_milestone(tmp_path, "dup-ms")
-    layout.create_goal(tmp_path, "dup-goal")
     with patch("bellman.cli.libfits_available", return_value=False):
-        for kind, name in (("milestone", "dup-ms"), ("goal", "dup-goal")):
-            result = runner.invoke(
-                app,
-                ["create", kind, name, "--path", str(tmp_path)],
-            )
-            assert result.exit_code == 1
-            assert "already exists" in result.output
+        result = runner.invoke(
+            app,
+            ["create", "milestone", "dup-ms", "--path", str(tmp_path)],
+        )
+        assert result.exit_code == 1
+        assert "already exists" in result.output
 
 
 def test_report_wbs_csv_writes_relative_output(tmp_path: Path) -> None:
@@ -184,9 +180,9 @@ def test_report_wbs_csv_writes_relative_output(tmp_path: Path) -> None:
 
 def test_report_wbs_load_error(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
-    goals = tmp_path / "goals"
-    goals.mkdir()
-    (goals / "bad.md").write_text("no header\n", encoding="utf-8")
+    milestones = tmp_path / "milestones"
+    milestones.mkdir()
+    (milestones / "bad.md").write_text("no header\n", encoding="utf-8")
     result = runner.invoke(app, ["report", "wbs", "csv", str(tmp_path)])
     assert result.exit_code == 1
     assert "load error" in result.output
@@ -194,9 +190,9 @@ def test_report_wbs_load_error(tmp_path: Path) -> None:
 
 def test_validate_markdown_failed_with_registry(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
-    goals = tmp_path / "goals"
-    goals.mkdir()
-    (goals / "bad.md").write_text("# Wrong\n\nBody.\n", encoding="utf-8")
+    milestones = tmp_path / "milestones"
+    milestones.mkdir()
+    (milestones / "bad.md").write_text("no header\n", encoding="utf-8")
     with (
         patch("bellman.cli.libfits_available", return_value=True),
         patch(
@@ -210,9 +206,9 @@ def test_validate_markdown_failed_with_registry(tmp_path: Path) -> None:
 
 def test_validate_markdown_failed_without_libfits(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
-    goals = tmp_path / "goals"
-    goals.mkdir()
-    (goals / "bad.md").write_text("# Wrong\n\nBody.\n", encoding="utf-8")
+    milestones = tmp_path / "milestones"
+    milestones.mkdir()
+    (milestones / "bad.md").write_text("no header\n", encoding="utf-8")
     with patch("bellman.cli.libfits_available", return_value=False):
         result = runner.invoke(app, ["validate", str(tmp_path)])
     assert result.exit_code == 1

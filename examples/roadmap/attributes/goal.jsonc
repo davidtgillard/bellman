@@ -1,0 +1,22 @@
+{
+  // Outcomes this roadmap contributes toward. The file name is the attribute name.
+  "name": "goal",
+  "version": "1.0",
+  "description": "Outcome this work contributes toward.",
+  "applies_to": ["initiative", "project", "work_package"],
+  "cardinality": "many",
+  "values": {
+    "reduce-churn": {
+      "title": "Reduce Churn",
+      "description": "Keep monthly churn below 2% through product improvements."
+    }
+  },
+  "value_schema": {
+    "type": "object",
+    "required": ["title"],
+    "properties": {
+      "title": { "type": "string" },
+      "description": { "type": "string" }
+    }
+  }
+}

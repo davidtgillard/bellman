@@ -18,11 +18,11 @@ from bellman.roadmap import load
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 
 
-def test_desired_nodes_include_goals() -> None:
+def test_desired_nodes_include_milestones() -> None:
     roadmap = load(EXAMPLES)
     nodes = desired_nodes(roadmap)
     assert any(
-        node.type_name == "goal" and node.node_id == "goal/reduce-churn"
+        node.type_name == "milestone" and node.node_id == "milestone/ga-release"
         for node in nodes
     )
 
@@ -33,10 +33,22 @@ def test_desired_links_include_parent_of() -> None:
     assert any(link.link_type == "parent_of" for link in links)
 
 
-def test_compute_registry_delta_reports_missing_goal(tmp_path: Path) -> None:
+_OK_MILESTONE = """# Manual Milestone
+
+## Date
+
+2026-09-30
+
+## Description
+
+Added by hand.
+"""
+
+
+def test_compute_registry_delta_reports_missing_milestone(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    (tmp_path / "goals" / "manual-goal.md").write_text(
-        "# Manual Goal\n\nAdded by hand.\n",
+    (tmp_path / "milestones" / "manual-milestone.md").write_text(
+        _OK_MILESTONE,
         encoding="utf-8",
     )
     (tmp_path / ".fits").mkdir()
@@ -57,16 +69,16 @@ def test_compute_registry_delta_reports_missing_goal(tmp_path: Path) -> None:
 
     assert isinstance(result, Ok)
     delta = result.ok_value
-    assert delta.missing_nodes == ("goal manual-goal",)
+    assert delta.missing_nodes == ("milestone manual-milestone",)
     assert delta.has_differences
     assert delta.missing_node_ids == frozenset(
-        {DesiredNode("goal", "goal/manual-goal")}
+        {DesiredNode("milestone", "milestone/manual-milestone")}
     )
     assert delta.desired_node_count == 1
     assert delta.actual_node_count == 0
 
 
-def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
+def test_compute_registry_delta_reports_extra_milestone(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     (tmp_path / ".fits").mkdir()
     roadmap = load(tmp_path)
@@ -75,8 +87,8 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
         instances=(
             InstanceRecord(
                 guid="00000000-0000-0000-0000-000000000001",
-                instance_name="orphan-goal",
-                type_name="goal",
+                instance_name="orphan-milestone",
+                type_name="milestone",
                 kind="node",
             ),
         )
@@ -96,17 +108,94 @@ def test_compute_registry_delta_reports_extra_goal(tmp_path: Path) -> None:
 
     assert isinstance(result, Ok)
     delta = result.ok_value
-    assert delta.extra_nodes == ("goal orphan-goal",)
+    assert delta.extra_nodes == ("milestone orphan-milestone",)
     assert delta.has_differences
-    assert any(node.type_name == "goal" for node in delta.extra_node_ids)
+    assert any(node.type_name == "milestone" for node in delta.extra_node_ids)
     assert delta.actual_node_count == 1
     assert delta.desired_node_count == 0
 
 
+def test_compute_registry_delta_reports_obsolete_goal_graph(tmp_path: Path) -> None:
+    from pyfits import Id
+    from pyfits.models import GraphEdge
+
+    layout.ensure_roadmap_dirs(tmp_path)
+    (tmp_path / ".fits").mkdir()
+    roadmap = load(tmp_path)
+    kind_guid = "00000000-0000-0000-0000-000000000001"
+    goal_guid = "00000000-0000-0000-0000-000000000002"
+    milestone_root = "00000000-0000-0000-0000-000000000003"
+    history = GraphHistory(
+        instances=(
+            InstanceRecord(
+                guid=kind_guid,
+                instance_name="goal",
+                type_name="kind",
+                kind="node",
+            ),
+            InstanceRecord(
+                guid=goal_guid,
+                instance_name="reduce-churn",
+                type_name="goal",
+                kind="node",
+                parent_guid=kind_guid,
+            ),
+            InstanceRecord(
+                guid=milestone_root,
+                instance_name="milestone",
+                type_name="kind",
+                kind="node",
+            ),
+        )
+    )
+    graph = Graph(
+        nodes=(),
+        edges=(
+            GraphEdge(
+                from_id=Id(kind_guid),
+                to_id=Id(goal_guid),
+                kind="registered_link",
+                link_type="supports",
+                id=Id("00000000-0000-0000-0000-000000000004"),
+            ),
+            GraphEdge(
+                from_id=Id(kind_guid),
+                to_id=Id(goal_guid),
+                kind="registered_link",
+                link_type="supports_wp",
+                id=Id("00000000-0000-0000-0000-000000000005"),
+            ),
+        ),
+    )
+    with (
+        patch("bellman.graph.delta.libfits_available", return_value=True),
+        patch(
+            "bellman.graph.delta.InstanceIndex.load",
+            return_value=Ok(InstanceIndex.from_history(history)),
+        ),
+        patch(
+            "bellman.graph.delta.Repo.open",
+            return_value=Ok(_FakeRepo(graph=graph)),
+        ),
+    ):
+        result = compute_registry_delta(tmp_path, roadmap)
+
+    assert isinstance(result, Ok)
+    delta = result.ok_value
+    assert delta.extra_nodes == ("goal reduce-churn", "kind goal")
+    assert delta.extra_links == (
+        "supports goal/reduce-churn -> goal",
+        "supports_wp goal/reduce-churn -> goal",
+    )
+    assert delta.has_differences
+    assert delta.extra_node_ids == frozenset()
+    assert "milestone" not in " ".join(delta.extra_nodes)
+
+
 def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    (tmp_path / "goals" / "manual-goal.md").write_text(
-        "# Manual Goal\n\nAdded by hand.\n",
+    (tmp_path / "milestones" / "manual-milestone.md").write_text(
+        _OK_MILESTONE,
         encoding="utf-8",
     )
     (tmp_path / ".fits").mkdir()
@@ -115,8 +204,8 @@ def test_compute_registry_delta_detects_legacy_id_migration(tmp_path: Path) -> N
         instances=(
             InstanceRecord(
                 guid="00000000-0000-0000-0000-000000000001",
-                instance_name="manual-goal",
-                type_name="goal",
+                instance_name="manual-milestone",
+                type_name="milestone",
                 kind="node",
             ),
         )
@@ -142,7 +231,7 @@ def test_compute_registry_delta_no_differences_when_aligned(tmp_path: Path) -> N
     layout.ensure_roadmap_dirs(tmp_path)
     (tmp_path / ".fits").mkdir()
     roadmap = load(tmp_path)
-    assert roadmap.goals == ()
+    assert roadmap.milestones == ()
 
     with (
         patch("bellman.graph.delta.libfits_available", return_value=True),

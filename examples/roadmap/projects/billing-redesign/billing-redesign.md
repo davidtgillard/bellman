@@ -23,3 +23,4 @@ End-to-end redesign of invoicing and payment flows.
 
 - priority: P1
 - program@1.0: platform-v2 [allocation: 0.5]
+- goal: reduce-churn

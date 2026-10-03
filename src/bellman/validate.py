@@ -16,7 +16,6 @@ from bellman.model import (
     UnknownEstimate,
     WorkPackage,
 )
-from bellman.naming import slugify
 
 
 def _collect_wp_edges(
@@ -226,26 +225,6 @@ def validate_roadmap(roadmap: Roadmap) -> ValidationResult:
         if milestone.date == "YYYY-MM-DD" or len(milestone.date) != 10:
             errors.append(
                 BellmanError(milestone.path, "milestone date must be YYYY-MM-DD")
-            )
-
-    for goal in roadmap.goals:
-        if not goal.title.strip():
-            errors.append(BellmanError(goal.path, "goal missing top-level header"))
-        else:
-            try:
-                title_matches = slugify(goal.title) == goal.name
-            except ValueError:
-                title_matches = False
-            if not title_matches:
-                errors.append(
-                    BellmanError(
-                        goal.path,
-                        f"goal header {goal.title!r} does not match name {goal.name!r}",
-                    )
-                )
-        if not goal.description.strip():
-            errors.append(
-                BellmanError(goal.path, "goal missing content beneath header")
             )
 
     errors.extend(check_attributes(roadmap))

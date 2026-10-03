@@ -59,7 +59,7 @@ def test_create_initiative_sync_failure_exits_1(tmp_path: Path) -> None:
     assert "code=test" in result.output
 
 
-def test_create_project_milestone_goal_calls_sync(tmp_path: Path) -> None:
+def test_create_project_and_milestone_calls_sync(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     sync_calls: list[tuple[str, str]] = []
 
@@ -74,7 +74,7 @@ def test_create_project_milestone_goal_calls_sync(tmp_path: Path) -> None:
         for kind, name in (
             ("project", "p-one"),
             ("milestone", "m-one"),
-            ("goal", "g-one"),
+            ("milestone", "g-one"),
         ):
             result = runner.invoke(
                 app,
@@ -84,15 +84,17 @@ def test_create_project_milestone_goal_calls_sync(tmp_path: Path) -> None:
     assert sync_calls == [
         ("project", "p-one"),
         ("milestone", "m-one"),
-        ("goal", "g-one"),
+        ("milestone", "g-one"),
     ]
 
 
 def test_delete_calls_prune_deleted_entity(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    layout_dir = tmp_path / "goals"
+    layout_dir = tmp_path / "milestones"
     layout_dir.mkdir(parents=True)
-    (layout_dir / "my-goal.md").write_text("# My Goal\n\nTBD.\n", encoding="utf-8")
+    (layout_dir / "my-milestone.md").write_text(
+        "# My Milestone\n\nTBD.\n", encoding="utf-8"
+    )
     prune_calls: list[tuple[str, str]] = []
 
     def fake_prune(root: Path, kind: str, name: str) -> Ok[None]:
@@ -105,10 +107,10 @@ def test_delete_calls_prune_deleted_entity(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["delete", "my-goal", "--path", str(tmp_path)],
+            ["delete", "my-milestone", "--path", str(tmp_path)],
         )
     assert result.exit_code == 0
-    assert prune_calls == [("goal", "my-goal")]
+    assert prune_calls == [("milestone", "my-milestone")]
 
 
 def test_delete_missing_exits_1(tmp_path: Path) -> None:
@@ -125,7 +127,7 @@ def test_delete_missing_exits_1(tmp_path: Path) -> None:
 def test_delete_prune_failure_exits_1(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "doomed")
+    layout.create_milestone(tmp_path, "doomed")
     with (
         patch("bellman.cli.libfits_available", return_value=True),
         patch(
@@ -144,11 +146,11 @@ def test_delete_prune_failure_exits_1(tmp_path: Path) -> None:
 def test_delete_without_libfits_notes(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "note-goal")
+    layout.create_milestone(tmp_path, "note-milestone")
     with patch("bellman.cli.libfits_available", return_value=False):
         result = runner.invoke(
             app,
-            ["delete", "note-goal", "--path", str(tmp_path)],
+            ["delete", "note-milestone", "--path", str(tmp_path)],
         )
     assert result.exit_code == 0
     assert "libfits not found" in result.output
@@ -306,9 +308,11 @@ def test_demote_without_libfits_notes(tmp_path: Path) -> None:
 
 def test_rename_bare_calls_sync_renamed_entity(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    layout_dir = tmp_path / "goals"
+    layout_dir = tmp_path / "milestones"
     layout_dir.mkdir(parents=True)
-    (layout_dir / "old-goal.md").write_text("# Old Goal\n\nTBD.\n", encoding="utf-8")
+    (layout_dir / "old-milestone.md").write_text(
+        "# Old Milestone\n\nTBD.\n", encoding="utf-8"
+    )
     sync_calls: list[tuple[str, str, str]] = []
 
     def fake_sync(root: Path, kind: str, old_name: str, new_name: str) -> Ok[None]:
@@ -321,26 +325,33 @@ def test_rename_bare_calls_sync_renamed_entity(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["rename", "old-goal", "new-goal", "--path", str(tmp_path)],
+            ["rename", "old-milestone", "new-milestone", "--path", str(tmp_path)],
         )
     assert result.exit_code == 0
-    assert sync_calls == [("goal", "old-goal", "new-goal")]
-    assert (layout_dir / "new-goal.md").is_file()
+    assert sync_calls == [("milestone", "old-milestone", "new-milestone")]
+    assert (layout_dir / "new-milestone.md").is_file()
     assert "Graph sync passed." in result.output
 
 
-def test_rename_typed_goal(tmp_path: Path) -> None:
+def test_rename_typed_milestone(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
     with patch("bellman.cli.libfits_available", return_value=False):
         result = runner.invoke(
             app,
-            ["rename", "goal", "system-mci", "renamed-goal", "--path", str(tmp_path)],
+            [
+                "rename",
+                "milestone",
+                "system-mci",
+                "renamed-milestone",
+                "--path",
+                str(tmp_path),
+            ],
         )
     assert result.exit_code == 0
-    assert layout.goal_path(tmp_path, "renamed-goal").is_file()
+    assert layout.milestone_path(tmp_path, "renamed-milestone").is_file()
     assert layout.initiative_path(tmp_path, "system-mci").is_file()
 
 
@@ -370,10 +381,17 @@ def test_rename_initiative_project_milestone(tmp_path: Path) -> None:
 def test_rename_value_error_invalid_kebab(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "valid-goal")
+    layout.create_milestone(tmp_path, "valid-milestone")
     result = runner.invoke(
         app,
-        ["rename", "goal", "valid-goal", "Not_Valid", "--path", str(tmp_path)],
+        [
+            "rename",
+            "milestone",
+            "valid-milestone",
+            "Not_Valid",
+            "--path",
+            str(tmp_path),
+        ],
     )
     assert result.exit_code == 1
     assert "kebab-case" in result.output
@@ -382,7 +400,7 @@ def test_rename_value_error_invalid_kebab(tmp_path: Path) -> None:
 def test_rename_sync_failure_exits_1(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "rename-fail")
+    layout.create_milestone(tmp_path, "rename-fail")
     with (
         patch("bellman.cli.libfits_available", return_value=True),
         patch(
@@ -392,7 +410,14 @@ def test_rename_sync_failure_exits_1(tmp_path: Path) -> None:
     ):
         result = runner.invoke(
             app,
-            ["rename", "goal", "rename-fail", "renamed-ok", "--path", str(tmp_path)],
+            [
+                "rename",
+                "milestone",
+                "rename-fail",
+                "renamed-ok",
+                "--path",
+                str(tmp_path),
+            ],
         )
     assert result.exit_code == 1
     assert "Graph sync failed" in result.output
@@ -401,7 +426,7 @@ def test_rename_sync_failure_exits_1(tmp_path: Path) -> None:
 def test_rename_ambiguous_shows_hint(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
     result = runner.invoke(
         app,

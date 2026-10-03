@@ -19,10 +19,33 @@ from bellman.report.status import compute_roadmap_status, format_status_report
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 
 
-def _write_goal(root: Path, name: str, content: str) -> None:
-    goal_dir = root / "goals"
-    goal_dir.mkdir(parents=True, exist_ok=True)
-    (goal_dir / f"{name}.md").write_text(content, encoding="utf-8")
+_BAD_DATE = """# Bad Date
+
+## Date
+
+TBD
+
+## Description
+
+Content.
+"""
+
+_OK_MILESTONE = """# Ok Milestone
+
+## Date
+
+2026-09-30
+
+## Description
+
+Body.
+"""
+
+
+def _write_milestone(root: Path, name: str, content: str) -> None:
+    ms_dir = root / "milestones"
+    ms_dir.mkdir(parents=True, exist_ok=True)
+    (ms_dir / f"{name}.md").write_text(content, encoding="utf-8")
 
 
 def _write_project_with_wp(root: Path, wp_content: str) -> None:
@@ -49,30 +72,31 @@ def test_example_roadmap_status_entities_ok() -> None:
     assert "billing-redesign" in names
     assert "billing-redesign/wp-invoicing" in names
     assert "ga-release" in names
-    assert "reduce-churn" in names
     assert all(e.markdown == "ok" for e in status.entities)
     assert all(e.registry == "n/a" for e in status.entities)
     assert status.registry_error is not None
 
 
-def test_invalid_goal_marked_invalid(tmp_path: Path) -> None:
+def test_invalid_milestone_marked_invalid(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "reduce-churn", "# Wrong Title\n\nSome content.\n")
+    _write_milestone(tmp_path, "bad-date", _BAD_DATE)
     result = compute_roadmap_status(tmp_path, registry=False)
     assert isinstance(result, Ok)
-    goal = next(e for e in result.ok_value.entities if e.name == "reduce-churn")
-    assert goal.markdown == "invalid"
-    assert any("does not match name" in issue for issue in goal.issues)
+    milestone = next(e for e in result.ok_value.entities if e.name == "bad-date")
+    assert milestone.markdown == "invalid"
+    assert any("YYYY-MM-DD" in issue for issue in milestone.issues)
 
 
-def test_unparseable_goal_appears_as_unparsed(tmp_path: Path) -> None:
+def test_unparseable_milestone_appears_as_unparsed(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "broken-goal", "no header\n")
+    _write_milestone(tmp_path, "broken-milestone", "no header\n")
     result = compute_roadmap_status(tmp_path, registry=False)
     assert isinstance(result, Ok)
-    goal = next(e for e in result.ok_value.entities if e.name == "broken-goal")
-    assert goal.markdown == "unparsed"
-    assert goal.issues
+    milestone = next(
+        e for e in result.ok_value.entities if e.name == "broken-milestone"
+    )
+    assert milestone.markdown == "unparsed"
+    assert milestone.issues
 
 
 def test_unknown_estimate_is_warning(tmp_path: Path) -> None:
@@ -94,7 +118,7 @@ def test_unknown_estimate_is_warning(tmp_path: Path) -> None:
 
 def test_registry_missing_node_on_entity(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "manual-goal", "# Manual Goal\n\nAdded by hand.\n")
+    _write_milestone(tmp_path, "manual-milestone", _OK_MILESTONE)
     (tmp_path / ".fits").mkdir()
     with (
         patch("bellman.graph.delta.libfits_available", return_value=True),
@@ -110,17 +134,17 @@ def test_registry_missing_node_on_entity(tmp_path: Path) -> None:
         result = compute_roadmap_status(tmp_path, registry=True)
     assert isinstance(result, Ok)
     status = result.ok_value
-    goal = next(e for e in status.entities if e.name == "manual-goal")
-    assert goal.registry == "missing"
+    milestone = next(e for e in status.entities if e.name == "manual-milestone")
+    assert milestone.registry == "missing"
     assert status.registry is not None
-    assert status.registry.missing_nodes == ("goal manual-goal",)
+    assert status.registry.missing_nodes == ("milestone manual-milestone",)
 
     buf = StringIO()
     format_status_report(status, buf)
     output = buf.getvalue()
     assert "registry: missing" in output
     assert "Missing nodes:" in output
-    assert "goal manual-goal" in output
+    assert "milestone manual-milestone" in output
 
 
 def test_global_name_overlap_issue(tmp_path: Path) -> None:
@@ -161,14 +185,14 @@ def test_soft_registry_skip_when_libfits_unavailable(tmp_path: Path) -> None:
 
 def test_format_status_includes_summary(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "reduce-churn", "# Wrong Title\n\nContent.\n")
+    _write_milestone(tmp_path, "bad-date", _BAD_DATE)
     result = compute_roadmap_status(tmp_path, registry=False)
     assert isinstance(result, Ok)
     buf = StringIO()
     format_status_report(result.ok_value, buf)
     output = buf.getvalue()
     assert "Roadmap:" in output
-    assert "Goals" in output
+    assert "Milestones" in output
     assert "invalid" in output
     assert "Summary:" in output
 
@@ -178,10 +202,12 @@ def test_extra_registry_node_appears_in_inventory(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
     delta = RegistryDelta(
         missing_nodes=(),
-        extra_nodes=("goal orphan-goal",),
+        extra_nodes=("milestone orphan-milestone",),
         missing_links=(),
         extra_links=(),
-        extra_node_ids=frozenset({DesiredNode("goal", "goal/orphan-goal")}),
+        extra_node_ids=frozenset(
+            {DesiredNode("milestone", "milestone/orphan-milestone")}
+        ),
         desired_node_count=0,
         actual_node_count=1,
     )
@@ -191,9 +217,9 @@ def test_extra_registry_node_appears_in_inventory(tmp_path: Path) -> None:
     ):
         result = compute_roadmap_status(tmp_path, registry=True)
     assert isinstance(result, Ok)
-    orphan = next(e for e in result.ok_value.entities if e.name == "orphan-goal")
+    orphan = next(e for e in result.ok_value.entities if e.name == "orphan-milestone")
     assert orphan.registry == "extra"
-    assert orphan.kind == "goal"
+    assert orphan.kind == "milestone"
 
 
 def test_hard_registry_delta_error(tmp_path: Path) -> None:
@@ -241,7 +267,7 @@ def test_format_global_issues_and_registry_details(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     layout.create_initiative(tmp_path, "shared-name")
     layout.create_project(tmp_path, "shared-name")
-    _write_goal(tmp_path, "broken", "# Nope\n\nBody.\n")
+    _write_milestone(tmp_path, "broken", "# Nope\n\nBody.\n")
     result = compute_roadmap_status(tmp_path, registry=False)
     assert isinstance(result, Ok)
     # Inject multiple issues on one entity for multi-line formatting.
@@ -280,13 +306,13 @@ def test_format_full_registry_section(tmp_path: Path) -> None:
     from bellman.report.status import EntityStatus, RoadmapStatus
 
     delta = RegistryDelta(
-        missing_nodes=("goal a",),
-        extra_nodes=("goal b",),
+        missing_nodes=("milestone a",),
+        extra_nodes=("milestone b",),
         missing_links=("parent_of x -> y",),
         extra_links=("depends_on p -> q",),
         needs_id_migration=True,
-        missing_node_ids=frozenset({DesiredNode("goal", "goal/a")}),
-        extra_node_ids=frozenset({DesiredNode("goal", "goal/b")}),
+        missing_node_ids=frozenset({DesiredNode("milestone", "milestone/a")}),
+        extra_node_ids=frozenset({DesiredNode("milestone", "milestone/b")}),
         desired_node_count=2,
         actual_node_count=2,
         desired_link_count=1,
@@ -296,13 +322,13 @@ def test_format_full_registry_section(tmp_path: Path) -> None:
         root=str(tmp_path),
         entities=(
             EntityStatus(
-                kind="goal",
+                kind="milestone",
                 name="a",
                 path=None,
                 markdown="ok",
                 issues=(),
                 registry="missing",
-                node=DesiredNode("goal", "goal/a"),
+                node=DesiredNode("milestone", "milestone/a"),
             ),
         ),
         global_issues=(),
@@ -386,9 +412,9 @@ def test_unparseable_project_md(tmp_path: Path) -> None:
 
 def test_synced_entities_with_registry(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "ok-goal", "# Ok Goal\n\nBody.\n")
+    _write_milestone(tmp_path, "ok-milestone", _OK_MILESTONE)
     (tmp_path / ".fits").mkdir()
-    node = DesiredNode("goal", "goal/ok-goal")
+    node = DesiredNode("milestone", "milestone/ok-milestone")
     delta = RegistryDelta(
         missing_nodes=(),
         extra_nodes=(),
@@ -405,18 +431,18 @@ def test_synced_entities_with_registry(tmp_path: Path) -> None:
     ):
         result = compute_roadmap_status(tmp_path, registry=True)
     assert isinstance(result, Ok)
-    goal = next(e for e in result.ok_value.entities if e.name == "ok-goal")
-    assert goal.registry == "synced"
-    assert goal.node == node
+    milestone = next(e for e in result.ok_value.entities if e.name == "ok-milestone")
+    assert milestone.registry == "synced"
+    assert milestone.node == node
 
 
 def test_entity_marked_extra_when_in_extra_set(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    _write_goal(tmp_path, "ok-goal", "# Ok Goal\n\nBody.\n")
-    node = DesiredNode("goal", "goal/ok-goal")
+    _write_milestone(tmp_path, "ok-milestone", _OK_MILESTONE)
+    node = DesiredNode("milestone", "milestone/ok-milestone")
     delta = RegistryDelta(
         missing_nodes=(),
-        extra_nodes=("goal ok-goal",),
+        extra_nodes=("milestone ok-milestone",),
         missing_links=(),
         extra_links=(),
         extra_node_ids=frozenset({node}),
@@ -429,8 +455,8 @@ def test_entity_marked_extra_when_in_extra_set(tmp_path: Path) -> None:
     ):
         result = compute_roadmap_status(tmp_path, registry=True)
     assert isinstance(result, Ok)
-    goal = next(e for e in result.ok_value.entities if e.name == "ok-goal")
-    assert goal.registry == "extra"
+    milestone = next(e for e in result.ok_value.entities if e.name == "ok-milestone")
+    assert milestone.registry == "extra"
     # Covered extra should not duplicate the inventory row.
     extras = [e for e in result.ok_value.entities if e.registry == "extra"]
     assert len(extras) == 1
@@ -449,12 +475,11 @@ def test_helper_kind_and_display_names() -> None:
     assert _kind_from_desired_node(DesiredNode("milestone", "milestone/x")) == (
         "milestone"
     )
-    assert _kind_from_desired_node(DesiredNode("goal", "goal/x")) == "goal"
     assert (
         _display_name_for_node(DesiredNode("work_package", "project/foo/bar"))
         == "foo/bar"
     )
-    assert _display_name_for_node(DesiredNode("goal", "goal/x")) == "x"
+    assert _display_name_for_node(DesiredNode("milestone", "milestone/x")) == "x"
 
 
 def test_node_for_kind_name_helpers() -> None:
@@ -466,7 +491,6 @@ def test_node_for_kind_name_helpers() -> None:
     assert _node_for_kind_name("work_package", "proj/slug") is not None
     assert _node_for_kind_name("work_package", "noslug") is None
     assert _node_for_kind_name("milestone", "m") is not None
-    assert _node_for_kind_name("goal", "g") is not None
 
 
 def test_infer_paths_and_wp_regex(tmp_path: Path) -> None:

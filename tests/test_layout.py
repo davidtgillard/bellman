@@ -153,27 +153,27 @@ def test_create_project_rejects_md_suffix(tmp_path: Path) -> None:
 
 def test_delete_by_name_ambiguous_when_same_name(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
     with pytest.raises(BellmanLayoutError, match="ambiguous name"):
         layout.delete_entity(tmp_path, "system-mci")
 
 
-def test_delete_by_path_disambiguates_goal(tmp_path: Path) -> None:
+def test_delete_by_path_disambiguates_milestone(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
-    layout.delete_entity(tmp_path, "goals/system-mci.md")
-    assert not layout.goal_path(tmp_path, "system-mci").exists()
+    layout.delete_entity(tmp_path, "milestones/system-mci.md")
+    assert not layout.milestone_path(tmp_path, "system-mci").exists()
     assert layout.initiative_path(tmp_path, "system-mci").exists()
 
 
 def test_delete_by_path_disambiguates_initiative(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
     layout.delete_entity(tmp_path, "initiatives/system-mci.md")
-    assert layout.goal_path(tmp_path, "system-mci").exists()
+    assert layout.milestone_path(tmp_path, "system-mci").exists()
     assert not layout.initiative_path(tmp_path, "system-mci").exists()
 
 
@@ -187,22 +187,22 @@ def test_delete_project_by_path(tmp_path: Path) -> None:
 def test_delete_rejects_path_traversal(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     with pytest.raises(BellmanLayoutError, match="invalid entity path"):
-        layout.delete_entity(tmp_path, "goals/../../etc/passwd")
+        layout.delete_entity(tmp_path, "milestones/../../etc/passwd")
 
 
-def test_rename_goal(tmp_path: Path) -> None:
+def test_rename_milestone_preserves_heading(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "old-goal")
-    renamed = layout.rename_entity(tmp_path, "old-goal", "new-goal")
-    assert renamed.kind == "goal"
-    assert renamed.old_name == "old-goal"
-    assert renamed.new_name == "new-goal"
-    assert layout.goal_path(tmp_path, "new-goal").is_file()
-    assert not layout.goal_path(tmp_path, "old-goal").exists()
+    layout.create_milestone(tmp_path, "old-milestone")
+    renamed = layout.rename_entity(tmp_path, "old-milestone", "new-milestone")
+    assert renamed.kind == "milestone"
+    assert renamed.old_name == "old-milestone"
+    assert renamed.new_name == "new-milestone"
+    assert layout.milestone_path(tmp_path, "new-milestone").is_file()
+    assert not layout.milestone_path(tmp_path, "old-milestone").exists()
     assert (
-        layout.goal_path(tmp_path, "new-goal")
+        layout.milestone_path(tmp_path, "new-milestone")
         .read_text(encoding="utf-8")
-        .startswith("# New Goal")
+        .startswith("# Old Milestone")
     )
 
 
@@ -234,15 +234,15 @@ def test_rename_project(tmp_path: Path) -> None:
 
 def test_rename_destination_exists(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "keep-me")
-    layout.create_goal(tmp_path, "move-me")
+    layout.create_milestone(tmp_path, "keep-me")
+    layout.create_milestone(tmp_path, "move-me")
     with pytest.raises(BellmanLayoutError, match="already exists"):
         layout.rename_entity(tmp_path, "move-me", "keep-me")
 
 
 def test_rename_by_name_ambiguous_when_same_name(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
     with pytest.raises(BellmanLayoutError, match="ambiguous name"):
         layout.rename_entity(tmp_path, "system-mci", "renamed")
@@ -250,31 +250,33 @@ def test_rename_by_name_ambiguous_when_same_name(tmp_path: Path) -> None:
 
 def test_rename_by_kind_disambiguates(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
     renamed = layout.rename_entity(
         tmp_path,
         "system-mci",
-        "goal-renamed",
-        kind="goal",
+        "milestone-renamed",
+        kind="milestone",
     )
-    assert renamed.kind == "goal"
-    assert layout.goal_path(tmp_path, "goal-renamed").is_file()
+    assert renamed.kind == "milestone"
+    assert layout.milestone_path(tmp_path, "milestone-renamed").is_file()
     assert layout.initiative_path(tmp_path, "system-mci").is_file()
 
 
-def test_rename_by_path_disambiguates_goal(tmp_path: Path) -> None:
+def test_rename_by_path_disambiguates_milestone(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
+    layout.create_milestone(tmp_path, "system-mci")
     layout.create_initiative(tmp_path, "system-mci")
-    renamed = layout.rename_entity(tmp_path, "goals/system-mci.md", "goal-renamed")
-    assert renamed.kind == "goal"
-    assert layout.goal_path(tmp_path, "goal-renamed").is_file()
+    renamed = layout.rename_entity(
+        tmp_path, "milestones/system-mci.md", "milestone-renamed"
+    )
+    assert renamed.kind == "milestone"
+    assert layout.milestone_path(tmp_path, "milestone-renamed").is_file()
 
 
 def test_rename_rewrites_scope_dependency(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "old-dep")
+    layout.create_milestone(tmp_path, "old-dep")
     layout.create_initiative(tmp_path, "follower")
     initiative = layout.initiative_path(tmp_path, "follower")
     initiative.write_text(
@@ -313,7 +315,7 @@ def test_create_duplicate_entities(tmp_path: Path) -> None:
     layout.create_initiative(tmp_path, "dup-init")
     layout.create_project(tmp_path, "dup-proj")
     layout.create_milestone(tmp_path, "dup-ms")
-    layout.create_goal(tmp_path, "dup-goal")
+    layout.create_milestone(tmp_path, "dup-milestone")
     with pytest.raises(BellmanLayoutError, match="already exists"):
         layout.create_initiative(tmp_path, "dup-init")
     with pytest.raises(BellmanLayoutError, match="already exists"):
@@ -321,21 +323,21 @@ def test_create_duplicate_entities(tmp_path: Path) -> None:
     with pytest.raises(BellmanLayoutError, match="already exists"):
         layout.create_milestone(tmp_path, "dup-ms")
     with pytest.raises(BellmanLayoutError, match="already exists"):
-        layout.create_goal(tmp_path, "dup-goal")
+        layout.create_milestone(tmp_path, "dup-milestone")
 
 
 def test_resolve_entity_path_matrix(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "g1")
+    layout.create_milestone(tmp_path, "g1")
     layout.create_milestone(tmp_path, "m1")
     layout.create_initiative(tmp_path, "i1")
     layout.create_project(tmp_path, "p1")
     archived = layout.archived_initiative_path(tmp_path, "old-init")
     archived.write_text("# Old\n", encoding="utf-8")
 
-    assert layout.resolve_entity_path(tmp_path, "goals/g1.md")[0] == "goal"
-    assert layout.resolve_entity_path(tmp_path, "goals/g1")[0] == "goal"
-    assert layout.resolve_entity_path(tmp_path, "goal/g1")[0] == "goal"
+    assert layout.resolve_entity_path(tmp_path, "milestones/g1.md")[0] == "milestone"
+    assert layout.resolve_entity_path(tmp_path, "milestones/g1")[0] == "milestone"
+    assert layout.resolve_entity_path(tmp_path, "milestone/g1")[0] == "milestone"
     assert layout.resolve_entity_path(tmp_path, "milestones/m1.md")[0] == "milestone"
     assert layout.resolve_entity_path(tmp_path, "milestones/m1")[0] == "milestone"
     assert layout.resolve_entity_path(tmp_path, "milestone/m1")[0] == "milestone"
@@ -356,11 +358,11 @@ def test_resolve_entity_path_matrix(tmp_path: Path) -> None:
     with pytest.raises(BellmanLayoutError, match="invalid entity path"):
         layout.resolve_entity_path(tmp_path, ".")
     with pytest.raises(BellmanLayoutError, match="no entity"):
-        layout.resolve_entity_path(tmp_path, "goals/foo")
-    with pytest.raises(BellmanLayoutError, match="invalid goal path"):
-        layout.resolve_entity_path(tmp_path, "goals/a/b.md")
+        layout.resolve_entity_path(tmp_path, "milestones/foo")
+    with pytest.raises(BellmanLayoutError, match="invalid milestone path"):
+        layout.resolve_entity_path(tmp_path, "milestones/a/b.md")
     with pytest.raises(BellmanLayoutError, match="no entity"):
-        layout.resolve_entity_path(tmp_path, "goals/missing.md")
+        layout.resolve_entity_path(tmp_path, "milestones/missing.md")
     with pytest.raises(BellmanLayoutError, match="no entity"):
         layout.resolve_entity_path(tmp_path, "milestones/x")
     with pytest.raises(BellmanLayoutError, match="no entity"):
@@ -389,15 +391,15 @@ def test_resolve_entity_path_matrix(tmp_path: Path) -> None:
 
 def test_resolve_entity_path_outside_via_symlink(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    outside = tmp_path.parent / "outside-goal.md"
+    outside = tmp_path.parent / "outside-milestone.md"
     outside.write_text("# Outside\n", encoding="utf-8")
-    link = tmp_path / "goals" / "linked.md"
+    link = tmp_path / "milestones" / "linked.md"
     try:
         link.symlink_to(outside)
     except OSError:
         pytest.skip("symlinks not supported")
     with pytest.raises(BellmanLayoutError, match="outside roadmap"):
-        layout.resolve_entity_path(tmp_path, "goals/linked.md")
+        layout.resolve_entity_path(tmp_path, "milestones/linked.md")
 
 
 def test_find_entity_and_by_kind_errors(tmp_path: Path) -> None:
@@ -412,8 +414,6 @@ def test_find_entity_and_by_kind_errors(tmp_path: Path) -> None:
         layout.find_entity_by_kind(tmp_path, "initiative", "missing")
     with pytest.raises(BellmanLayoutError, match="no milestone"):
         layout.find_entity_by_kind(tmp_path, "milestone", "missing")
-    with pytest.raises(BellmanLayoutError, match="no goal"):
-        layout.find_entity_by_kind(tmp_path, "goal", "missing")
 
     layout.create_initiative(tmp_path, "i-ok")
     layout.create_milestone(tmp_path, "m-ok")
@@ -423,9 +423,9 @@ def test_find_entity_and_by_kind_errors(tmp_path: Path) -> None:
 
 def test_rename_same_name_and_archived(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "same-goal")
+    layout.create_milestone(tmp_path, "same-milestone")
     with pytest.raises(BellmanLayoutError, match="already named"):
-        layout.rename_entity(tmp_path, "same-goal", "same-goal")
+        layout.rename_entity(tmp_path, "same-milestone", "same-milestone")
 
     archived = layout.archived_initiative_path(tmp_path, "arch-old")
     archived.write_text("# Arch Old\n", encoding="utf-8")
@@ -436,18 +436,20 @@ def test_rename_same_name_and_archived(tmp_path: Path) -> None:
     assert layout.archived_initiative_path(tmp_path, "arch-new").is_file()
 
 
-def test_rename_goal_without_heading(tmp_path: Path) -> None:
+def test_rename_milestone_without_heading(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    path = layout.goal_path(tmp_path, "plain-goal")
+    path = layout.milestone_path(tmp_path, "plain-milestone")
     path.write_text("No heading here.\n", encoding="utf-8")
-    layout.rename_entity(tmp_path, "plain-goal", "plain-goal-2")
-    text = layout.goal_path(tmp_path, "plain-goal-2").read_text(encoding="utf-8")
+    layout.rename_entity(tmp_path, "plain-milestone", "plain-milestone-2")
+    text = layout.milestone_path(tmp_path, "plain-milestone-2").read_text(
+        encoding="utf-8"
+    )
     assert "No heading here." in text
 
 
 def test_rename_skips_unrelated_deps_and_loose_files(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "target-g")
+    layout.create_milestone(tmp_path, "target-g")
     layout.create_initiative(tmp_path, "follower")
     initiative = layout.initiative_path(tmp_path, "follower")
     initiative.write_text(
@@ -527,7 +529,7 @@ def test_resolve_entity_name_fqn_and_paths(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
     layout.create_initiative(tmp_path, "grow-feature")
     layout.create_project(tmp_path, "billing")
-    layout.create_goal(tmp_path, "reduce-churn")
+    layout.create_milestone(tmp_path, "ga-release")
 
     by_name = layout.resolve_entity(tmp_path, "grow-feature")
     assert by_name.kind == "initiative"
@@ -553,12 +555,12 @@ def test_resolve_entity_name_fqn_and_paths(tmp_path: Path) -> None:
 
     typed = layout.resolve_entity(tmp_path, "grow-feature", expected_kind="initiative")
     assert typed.kind == "initiative"
-    with pytest.raises(BellmanLayoutError, match="cannot use goal"):
+    with pytest.raises(BellmanLayoutError, match="cannot use milestone"):
         layout.resolve_entity(
-            tmp_path, "goals/reduce-churn.md", expected_kind="initiative"
+            tmp_path, "milestones/ga-release.md", expected_kind="initiative"
         )
     with pytest.raises(BellmanLayoutError, match="cannot use project"):
-        layout.resolve_entity(tmp_path, "projects/billing", expected_kind="goal")
+        layout.resolve_entity(tmp_path, "projects/billing", expected_kind="milestone")
 
 
 def test_live_initiative_fqn_does_not_match_archived(tmp_path: Path) -> None:
@@ -585,17 +587,19 @@ def test_promote_and_demote_accept_paths_and_fqn(tmp_path: Path) -> None:
 
 def test_promote_rejects_non_initiative_path(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "not-an-init")
-    with pytest.raises(BellmanLayoutError, match="cannot use goal"):
-        layout.promote_initiative(tmp_path, "goals/not-an-init")
+    layout.create_milestone(tmp_path, "not-an-init")
+    with pytest.raises(BellmanLayoutError, match="cannot use milestone"):
+        layout.promote_initiative(tmp_path, "milestones/not-an-init")
 
 
 def test_typed_rename_accepts_path(tmp_path: Path) -> None:
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "old-goal")
-    renamed = layout.rename_entity(tmp_path, "goals/old-goal", "new-goal", kind="goal")
-    assert renamed.new_name == "new-goal"
-    assert layout.goal_path(tmp_path, "new-goal").is_file()
+    layout.create_milestone(tmp_path, "old-milestone")
+    renamed = layout.rename_entity(
+        tmp_path, "milestones/old-milestone", "new-milestone", kind="milestone"
+    )
+    assert renamed.new_name == "new-milestone"
+    assert layout.milestone_path(tmp_path, "new-milestone").is_file()
 
 
 def test_resolve_entity_filter_wp_fallback(tmp_path: Path) -> None:

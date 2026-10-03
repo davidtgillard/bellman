@@ -10,18 +10,18 @@ from bellman.graph.fits_errors import ignore_if_already_exists, is_already_exist
 from bellman.model import Hardness, RelationType
 
 KIND_TYPE = "kind"
-"""Node type for type-root containers (``goal``, ``project``, …)."""
+"""Node type for type-root containers (``milestone``, ``project``, …)."""
 
 WORK_SCOPE_KIND_ROOT = "work_scope"
 """Kind-root instance that hosts both initiative and project nodes."""
 
-KIND_ROOT_NAMES = ("goal", "initiative", "project", "milestone", WORK_SCOPE_KIND_ROOT)
+KIND_ROOT_NAMES = ("initiative", "project", "milestone", WORK_SCOPE_KIND_ROOT)
 """Local names of kind-root instances.
 
-``goal`` and ``milestone`` host those entity types. ``work_scope`` hosts both
-``initiative`` and ``project`` so scope-precedence links can connect them as
-nested siblings (libfits nested links require a shared parent). ``initiative``
-and ``project`` kind-roots remain so kind names stay stable.
+``milestone`` hosts that entity type. ``work_scope`` hosts both ``initiative``
+and ``project`` so scope-precedence links can connect them as nested siblings
+(libfits nested links require a shared parent). ``initiative`` and ``project``
+kind-roots remain so kind names stay stable.
 """
 
 
@@ -50,7 +50,7 @@ def hardness_suffix(hard: Hardness) -> str:
 
 def bellman_node_types() -> frozenset[str]:
     """Node type names managed by bellman roadmap sync."""
-    return frozenset({"initiative", "project", "work_package", "milestone", "goal"})
+    return frozenset({"initiative", "project", "work_package", "milestone"})
 
 
 def bellman_link_types() -> frozenset[str]:
@@ -84,10 +84,7 @@ def bootstrap_registry(repo: Repo) -> Result[None, FitsError]:
         ),
         repo.register_node_type("work_package", container_node="project"),
         repo.register_node_type("milestone", container_node=KIND_TYPE),
-        repo.register_node_type("goal", container_node=KIND_TYPE),
         # Nested endpoint pairs → nested link types (same-parent creates only).
-        repo.register_link_type("supports", "project", "goal"),
-        repo.register_link_type("supports_wp", "work_package", "goal"),
         repo.register_link_type("targets", "project", "milestone"),
         repo.register_link_type("targets_wp", "work_package", "milestone"),
         repo.register_link_type("parent_of", "work_package", "work_package"),

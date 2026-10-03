@@ -12,20 +12,20 @@ from bellman.graph.identity import InstanceIndex
 
 def test_instance_index_resolves_qualified_paths() -> None:
     kind_guid = "550e8400-e29b-41d4-a716-446655440000"
-    goal_guid = "660e8400-e29b-41d4-a716-446655440001"
+    milestone_guid = "660e8400-e29b-41d4-a716-446655440001"
     history = GraphHistory(
         instances=(
             InstanceRecord(
                 guid=kind_guid,
-                instance_name="goal",
+                instance_name="milestone",
                 type_name="kind",
                 kind="node",
                 scope="root",
             ),
             InstanceRecord(
-                guid=goal_guid,
-                instance_name="reduce-churn",
-                type_name="goal",
+                guid=milestone_guid,
+                instance_name="ga-release",
+                type_name="milestone",
                 kind="node",
                 scope="nested",
                 parent_guid=kind_guid,
@@ -39,12 +39,16 @@ def test_instance_index_resolves_qualified_paths() -> None:
         )
     )
     index = InstanceIndex.from_history(history)
-    assert index.guid_for_name("goal/reduce-churn") == Id(f"{kind_guid}/{goal_guid}")
-    assert index.name_for_guid(goal_guid) == "goal/reduce-churn"
-    assert index.name_for_guid(f"{kind_guid}/{goal_guid}") == "goal/reduce-churn"
-    assert index.live_node_names() == {"goal/reduce-churn"}
-    assert index.live_kind_names() == {"goal"}
-    assert index.guids_for_names({"goal/reduce-churn"}) == {goal_guid}
+    assert index.guid_for_name("milestone/ga-release") == Id(
+        f"{kind_guid}/{milestone_guid}"
+    )
+    assert index.name_for_guid(milestone_guid) == "milestone/ga-release"
+    assert (
+        index.name_for_guid(f"{kind_guid}/{milestone_guid}") == "milestone/ga-release"
+    )
+    assert index.live_node_names() == {"milestone/ga-release"}
+    assert index.live_kind_names() == {"milestone"}
+    assert index.guids_for_names({"milestone/ga-release"}) == {milestone_guid}
 
 
 def test_instance_index_cycle_and_missing_parent() -> None:
@@ -55,33 +59,33 @@ def test_instance_index_cycle_and_missing_parent() -> None:
             InstanceRecord(
                 guid=a,
                 instance_name="a",
-                type_name="goal",
+                type_name="milestone",
                 kind="node",
                 parent_guid=b,
             ),
             InstanceRecord(
                 guid=b,
                 instance_name="b",
-                type_name="goal",
+                type_name="milestone",
                 kind="node",
                 parent_guid=a,
             ),
             InstanceRecord(
                 guid="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
                 instance_name="orphan",
-                type_name="goal",
+                type_name="milestone",
                 kind="node",
                 parent_guid="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
             ),
         )
     )
     index = InstanceIndex.from_history(history)
-    assert index.guid_for_name("goal/a") is not None
-    assert index.guid_for_name("goal/b") is not None
+    assert index.guid_for_name("milestone/a") is not None
+    assert index.guid_for_name("milestone/b") is not None
     assert index.name_for_guid("unknown") is None
     assert index.name_for_guid("parent_of--x--y") is None
     assert index.children_of("missing") == []
-    assert index.guids_for_names({"missing", "goal/orphan"}) == {
+    assert index.guids_for_names({"missing", "milestone/orphan"}) == {
         "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     }
 
@@ -116,40 +120,40 @@ def test_instance_index_children_of() -> None:
         instances=(
             InstanceRecord(
                 guid=kind_guid,
-                instance_name="goal",
+                instance_name="milestone",
                 type_name="kind",
                 kind="node",
             ),
             InstanceRecord(
                 guid=child_guid,
                 instance_name="child",
-                type_name="goal",
+                type_name="milestone",
                 kind="node",
                 parent_guid=kind_guid,
             ),
         )
     )
     index = InstanceIndex.from_history(history)
-    kids = index.children_of("goal")
+    kids = index.children_of("milestone")
     assert len(kids) == 1
     assert kids[0].instance_name == "child"
 
 
 def test_name_for_guid_falls_back_to_child_segment() -> None:
     kind_guid = "550e8400-e29b-41d4-a716-446655440000"
-    goal_guid = "660e8400-e29b-41d4-a716-446655440001"
+    milestone_guid = "660e8400-e29b-41d4-a716-446655440001"
     history = GraphHistory(
         instances=(
             InstanceRecord(
                 guid=kind_guid,
-                instance_name="goal",
+                instance_name="milestone",
                 type_name="kind",
                 kind="node",
             ),
             InstanceRecord(
-                guid=goal_guid,
-                instance_name="reduce-churn",
-                type_name="goal",
+                guid=milestone_guid,
+                instance_name="ga-release",
+                type_name="milestone",
                 kind="node",
                 parent_guid=kind_guid,
             ),
@@ -157,7 +161,7 @@ def test_name_for_guid_falls_back_to_child_segment() -> None:
     )
     index = InstanceIndex.from_history(history)
     # Wire path not stored under unknown parent prefix — last segment lookup
-    assert index.name_for_guid(f"deadbeef/{goal_guid}") == "goal/reduce-churn"
+    assert index.name_for_guid(f"deadbeef/{milestone_guid}") == "milestone/ga-release"
 
 
 def test_instance_index_work_scopes_use_type_path_not_parent_name() -> None:

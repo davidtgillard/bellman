@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import uuid
 from pathlib import Path
 
 import pytest
@@ -65,17 +63,17 @@ def test_delete_prunes_graph_node(tmp_path: Path) -> None:
         pytest.skip("libfits not available")
     layout.ensure_roadmap_dirs(tmp_path)
     _bootstrap_pyfits(tmp_path)
-    layout.create_goal(tmp_path, "my-goal")
+    layout.create_milestone(tmp_path, "my-milestone")
     assert isinstance(sync_roadmap(tmp_path), Ok)
-    assert _has_live_logical(tmp_path, "goal/my-goal")
-    layout.delete_entity(tmp_path, "my-goal")
-    result = prune_deleted_entity(tmp_path, "goal", "my-goal")
+    assert _has_live_logical(tmp_path, "milestone/my-milestone")
+    layout.delete_entity(tmp_path, "my-milestone")
+    result = prune_deleted_entity(tmp_path, "milestone", "my-milestone")
     assert isinstance(result, Ok)
-    assert not _has_live_logical(tmp_path, "goal/my-goal")
+    assert not _has_live_logical(tmp_path, "milestone/my-milestone")
     history = load_graph_history(tmp_path)
     assert isinstance(history, Ok)
     assert all(
-        not (i.type_name == "goal" and i.instance_name == "my-goal")
+        not (i.type_name == "milestone" and i.instance_name == "my-milestone")
         for i in history.ok_value.instances
     )
 
@@ -226,84 +224,6 @@ def test_promote_second_sync_keeps_scope_link_guid(tmp_path: Path) -> None:
     assert first is not None
     assert isinstance(sync_roadmap(tmp_path), Ok)
     assert _desired_link_child_guid(tmp_path, link) == first
-
-
-def _inject_nested_link(
-    root: Path, *, link_type: str, in_guid: str, out_guid: str
-) -> str:
-    """Write a nested subgraph link that pyfits will not create across parents."""
-    link_guid = str(uuid.uuid4())
-    for sub in (root / "nodes").rglob("subgraph.jsonc"):
-        data = json.loads(sub.read_text(encoding="utf-8"))
-        nodes = data.get("nodes") or []
-        if not any(node.get("guid") == in_guid for node in nodes):
-            continue
-        data.setdefault("links", []).append(
-            {
-                "guid": link_guid,
-                "link_type": link_type,
-                "in": in_guid,
-                "out": out_guid,
-            }
-        )
-        sub.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        return link_guid
-    raise AssertionError(f"subgraph containing {in_guid} not found")
-
-
-@pytest.mark.integration
-def test_demote_drops_project_only_supports_link(tmp_path: Path) -> None:
-    if not libfits_available():
-        pytest.skip("libfits not available")
-    layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_initiative(tmp_path, "kri-image-tools")
-    layout.create_goal(tmp_path, "reduce-churn")
-    _bootstrap_pyfits(tmp_path)
-    assert isinstance(sync_roadmap(tmp_path), Ok)
-    layout.promote_initiative(tmp_path, "kri-image-tools")
-    assert isinstance(sync_roadmap(tmp_path), Ok)
-    project_guid = _child_guid(tmp_path, "project/kri-image-tools")
-    goal_guid = _child_guid(tmp_path, "goal/reduce-churn")
-    assert project_guid is not None
-    assert goal_guid is not None
-    _inject_nested_link(
-        tmp_path,
-        link_type="supports",
-        in_guid=project_guid,
-        out_guid=goal_guid,
-    )
-    open_result = Repo.open(tmp_path)
-    assert isinstance(open_result, Ok)
-    with open_result.ok_value as repo:
-        graph_result = repo.output_graph(include_nested=True)
-    assert isinstance(graph_result, Ok)
-    assert any(edge.link_type == "supports" for edge in graph_result.ok_value.edges)
-
-    layout.demote_project(tmp_path, "kri-image-tools")
-    result = sync_roadmap(tmp_path)
-    assert isinstance(result, Ok)
-    assert _logical_type(tmp_path, "initiative/kri-image-tools") == "initiative"
-    assert _child_guid(tmp_path, "initiative/kri-image-tools") == project_guid
-    open_result = Repo.open(tmp_path)
-    assert isinstance(open_result, Ok)
-    with open_result.ok_value as repo:
-        graph_result = repo.output_graph(include_nested=True)
-    assert isinstance(graph_result, Ok)
-    assert all(edge.link_type != "supports" for edge in graph_result.ok_value.edges)
-
-
-@pytest.mark.integration
-def test_sync_coexists_goal_and_initiative_same_name(tmp_path: Path) -> None:
-    if not libfits_available():
-        pytest.skip("libfits not available")
-    layout.ensure_roadmap_dirs(tmp_path)
-    _bootstrap_pyfits(tmp_path)
-    layout.create_goal(tmp_path, "system-mci")
-    layout.create_initiative(tmp_path, "system-mci")
-    result = sync_roadmap(tmp_path)
-    assert isinstance(result, Ok)
-    assert _has_live_logical(tmp_path, "goal/system-mci")
-    assert _has_live_logical(tmp_path, "initiative/system-mci")
 
 
 @pytest.mark.integration

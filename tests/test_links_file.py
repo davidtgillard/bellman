@@ -35,7 +35,7 @@ def test_reconcile_drops_unregistered_links(tmp_path: Path) -> None:
                     {
                         "name": "a",
                         "kind": "node",
-                        "type": "goal",
+                        "type": "milestone",
                         "guid": _NODE_GUID,
                         "scope": "root",
                     }
@@ -157,7 +157,7 @@ def test_reconcile_drops_subgraph_links(tmp_path: Path) -> None:
                     {
                         "name": "a",
                         "kind": "node",
-                        "type": "goal",
+                        "type": "milestone",
                         "guid": _NODE_GUID,
                         "scope": "root",
                     },
@@ -195,7 +195,7 @@ def test_reconcile_drops_subgraph_links(tmp_path: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    sub = tmp_path / "nodes" / "goal" / "subgraph.jsonc"
+    sub = tmp_path / "nodes" / "milestone" / "subgraph.jsonc"
     sub.parent.mkdir(parents=True)
     sub.write_text(
         json.dumps({"links": [{"guid": _LINK_GUID}, {"guid": "other"}]}),
@@ -225,16 +225,16 @@ def test_reconcile_drop_touching_nodes(tmp_path: Path) -> None:
                 "kind": "fits-registry",
                 "instances": [
                     {
-                        "name": "goal-a",
+                        "name": "milestone-a",
                         "kind": "node",
-                        "type": "goal",
+                        "type": "milestone",
                         "guid": _NODE_GUID,
                         "scope": "root",
                     },
                     {
-                        "name": "goal-b",
+                        "name": "milestone-b",
                         "kind": "node",
-                        "type": "goal",
+                        "type": "milestone",
                         "guid": _MISSING_GUID,
                         "scope": "root",
                     },
@@ -276,14 +276,14 @@ def test_reconcile_drop_touching_nodes(tmp_path: Path) -> None:
         instances=(
             InstanceRecord(
                 guid=_NODE_GUID,
-                instance_name="goal-a",
-                type_name="goal",
+                instance_name="milestone-a",
+                type_name="milestone",
                 kind="node",
             ),
             InstanceRecord(
                 guid=_MISSING_GUID,
-                instance_name="goal-b",
-                type_name="goal",
+                instance_name="milestone-b",
+                type_name="milestone",
                 kind="node",
             ),
         )
@@ -294,7 +294,7 @@ def test_reconcile_drop_touching_nodes(tmp_path: Path) -> None:
     ):
         result = reconcile_link_artifacts(
             tmp_path,
-            drop_touching_nodes={"goal-a"},
+            drop_touching_nodes={"milestone-a"},
         )
     assert isinstance(result, Ok)
     assert result.ok_value >= 1

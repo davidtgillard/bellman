@@ -13,7 +13,6 @@ from attr_support import (
     wp_block,
     wp_yaml,
     write_attribute,
-    write_goal,
     write_initiative,
     write_milestone,
     write_project,
@@ -76,10 +75,10 @@ def test_unknown_attribute(tmp_path: Path) -> None:
 def test_attribute_does_not_apply_to_kind(tmp_path: Path) -> None:
     root = _base(tmp_path)
     write_initiative(root, "alpha", ["priority: P1"])
-    write_goal(root, "g", ["priority: P1"])
+    write_milestone(root, "g", ["priority: P1"])
     message = _only(_messages(root))
-    assert "goal 'g'" in message
-    assert "does not apply to goal (applies to: initiative, project)" in message
+    assert "milestone 'g'" in message
+    assert "does not apply to milestone (applies to: initiative, project)" in message
 
 
 def test_plain_set_value_must_be_listed(tmp_path: Path) -> None:
@@ -385,7 +384,7 @@ def test_required_checked_on_every_kind(tmp_path: Path) -> None:
             {
                 "name": "risk",
                 "version": "1.0",
-                "applies_to": ["initiative", "project", "milestone", "goal"],
+                "applies_to": ["initiative", "project", "milestone"],
                 "cardinality": "one",
                 "required": True,
                 "values": ["low", "high"],
@@ -395,9 +394,8 @@ def test_required_checked_on_every_kind(tmp_path: Path) -> None:
     write_initiative(root, "i")
     write_project(root, "p")
     write_milestone(root, "m")
-    write_goal(root, "g")
     kinds = sorted(m.split(" ")[0] for m in _messages(root))
-    assert kinds == ["goal", "initiative", "milestone", "project"]
+    assert kinds == ["initiative", "milestone", "project"]
 
 
 def test_archived_initiative_is_checked_until_promoted(tmp_path: Path) -> None:
@@ -472,7 +470,7 @@ def test_status_reports_definition_problems_globally(tmp_path: Path) -> None:
     write_attribute(
         root,
         "bad",
-        json.dumps({"name": "bad", "version": "x", "applies_to": ["goal"]}),
+        json.dumps({"name": "bad", "version": "x", "applies_to": ["not-a-kind"]}),
     )
     result = compute_roadmap_status(root, registry=False)
     assert isinstance(result, Ok)

@@ -28,36 +28,36 @@ def test_sync_prune_tolerates_legacy_registry_ghosts(tmp_path: Path) -> None:
         pytest.skip("libfits not available")
 
     layout.ensure_roadmap_dirs(tmp_path)
-    layout.create_goal(tmp_path, "manual-goal")
+    layout.create_milestone(tmp_path, "manual-milestone")
     assert isinstance(init_pyfits_repo(tmp_path), Ok)
     assert isinstance(sync_roadmap(tmp_path), Ok)
 
-    qualified = entity_node_id("goal", "manual-goal")
+    qualified = entity_node_id("milestone", "manual-milestone")
     index = InstanceIndex.load(tmp_path)
     assert isinstance(index, Ok)
-    kind = index.ok_value.by_name["goal"]
-    goal = index.ok_value.by_name[qualified]
+    kind = index.ok_value.by_name["milestone"]
+    milestone = index.ok_value.by_name[qualified]
     _write_registry_instances(
         tmp_path,
         [
             {
                 "guid": kind.guid,
-                "name": "goal",
+                "name": "milestone",
                 "type": "kind",
                 "kind": "node",
                 "scope": "root",
             },
             {
-                "guid": goal.guid,
-                "name": "manual-goal",
-                "type": "goal",
+                "guid": milestone.guid,
+                "name": "manual-milestone",
+                "type": "milestone",
                 "kind": "node",
                 "scope": "root",
             },
             {
                 "guid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-                "name": "goal--manual-goal",
-                "type": "goal",
+                "name": "milestone--manual-milestone",
+                "type": "milestone",
                 "kind": "node",
                 "scope": "root",
             },

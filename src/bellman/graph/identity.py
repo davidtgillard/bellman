@@ -18,7 +18,7 @@ from bellman.graph.registry import KIND_TYPE
 
 __all__ = ["InstanceIndex"]
 
-_TYPE_QUALIFIED_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+_TYPE_QUALIFIED_KINDS = frozenset({"initiative", "project", "milestone"})
 """Entity types whose logical id is ``{type}/{name}`` regardless of parent name."""
 
 
@@ -81,7 +81,7 @@ def _wire_guid(inst: InstanceRecord, by_guid: dict[str, InstanceRecord]) -> str:
 class InstanceIndex:
     """Registry-backed lookup from logical instance names to wire GUIDs.
 
-    Node keys are qualified name paths (``goal/reduce-churn``). Link keys remain
+    Node keys are qualified name paths (``milestone/ga-release``). Link keys remain
     the registry local ``name``.
 
     Attributes:

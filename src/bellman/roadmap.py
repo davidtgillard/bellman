@@ -9,8 +9,7 @@ from pathlib import Path
 from bellman import layout
 from bellman.attributes.definition import load_attribute_catalog
 from bellman.errors import BellmanError
-from bellman.model import Goal, Initiative, Milestone, Project, Roadmap
-from bellman.parse.goal import parse_goal
+from bellman.model import Initiative, Milestone, Project, Roadmap
 from bellman.parse.milestone import parse_milestone
 from bellman.parse.work_scope import parse_work_scope
 
@@ -58,7 +57,6 @@ def load_for_validation(root: Path) -> LoadResult:
     archived: list[Initiative] = []
     projects: list[Project] = []
     milestones: list[Milestone] = []
-    goals: list[Goal] = []
 
     init_dir = root / layout.INITIATIVES_DIR
     if init_dir.is_dir():
@@ -109,21 +107,11 @@ def load_for_validation(root: Path) -> LoadResult:
 
             _append_parsed(path, parse_milestone_file, errors, milestones)
 
-    goal_dir = root / layout.GOALS_DIR
-    if goal_dir.is_dir():
-        for path in sorted(goal_dir.glob("*.md")):
-
-            def parse_goal_file(p: Path = path) -> Goal:
-                return parse_goal(p)
-
-            _append_parsed(path, parse_goal_file, errors, goals)
-
     roadmap = Roadmap(
         root=str(root.resolve()),
         initiatives=tuple(initiatives),
         projects=tuple(projects),
         milestones=tuple(milestones),
-        goals=tuple(goals),
         archived_initiatives=tuple(archived),
         attributes=catalog,
     )

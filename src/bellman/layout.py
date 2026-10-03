@@ -13,7 +13,6 @@ from bellman.naming import normalize_entity_name, validate_kebab
 INITIATIVES_DIR = "initiatives"
 PROJECTS_DIR = "projects"
 MILESTONES_DIR = "milestones"
-GOALS_DIR = "goals"
 ATTRIBUTES_DIR = "attributes"
 """Directory holding ``{name}.jsonc`` attribute definition files."""
 ARCHIVED_SUFFIX = ".archived.md"
@@ -66,8 +65,8 @@ class ResolvedEntity:
     """Entity located by :func:`resolve_entity`.
 
     Attributes:
-        kind: Entity kind (``initiative``, ``project``, ``milestone``,
-            ``goal``, or ``archived-initiative``).
+        kind: Entity kind (``initiative``, ``project``, ``milestone``, or
+            ``archived-initiative``).
         name: Natural kebab-case name.
         path: Filesystem path of the entity (markdown file or project
             directory).
@@ -78,7 +77,7 @@ class ResolvedEntity:
     path: Path
 
 
-_RENAMEABLE_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+_RENAMEABLE_KINDS = frozenset({"initiative", "project", "milestone"})
 
 _SCOPE_DEPENDENCY_RE = re.compile(
     r"^(\s*-\s+)(?P<predecessor>\S+)(\s*"
@@ -183,7 +182,6 @@ def ensure_roadmap_dirs(root: Path) -> None:
         INITIATIVES_DIR,
         PROJECTS_DIR,
         MILESTONES_DIR,
-        GOALS_DIR,
         ATTRIBUTES_DIR,
     ):
         (root / name).mkdir(parents=True, exist_ok=True)
@@ -247,10 +245,6 @@ def milestone_path(root: Path, name: str) -> Path:
     return root / MILESTONES_DIR / f"{name}.md"
 
 
-def goal_path(root: Path, name: str) -> Path:
-    return root / GOALS_DIR / f"{name}.md"
-
-
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -305,24 +299,11 @@ def create_milestone(root: Path, raw_name: str) -> Path:
     return path
 
 
-def create_goal(root: Path, raw_name: str) -> Path:
-    """Create ``goals/{name}.md``."""
-    name = normalize_entity_name(raw_name)
-    path = goal_path(root, name)
-    if path.exists():
-        raise BellmanLayoutError(f"goal already exists: {path}")
-    title = name.replace("-", " ").title()
-    content = f"# {title}\n\nTBD.\n"
-    _write_text(path, content)
-    return path
-
-
-_LAYOUT_DIRS = (INITIATIVES_DIR, PROJECTS_DIR, MILESTONES_DIR, GOALS_DIR)
+_LAYOUT_DIRS = (INITIATIVES_DIR, PROJECTS_DIR, MILESTONES_DIR)
 _GRAPH_KIND_TO_DIR = {
     "initiative": INITIATIVES_DIR,
     "project": PROJECTS_DIR,
     "milestone": MILESTONES_DIR,
-    "goal": GOALS_DIR,
 }
 _PATH_PREFIXES = frozenset(_LAYOUT_DIRS) | frozenset(_GRAPH_KIND_TO_DIR)
 
@@ -440,8 +421,8 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
         root: Roadmap root directory.
         ref: Path relative to ``root`` or an absolute path under ``root``.
             Accepts folder paths (``projects/foo``), markdown paths
-            (``projects/foo/foo.md``, ``goals/foo.md``), layout FQNs
-            (``initiatives/foo``), and graph FQNs (``goal/foo``).
+            (``projects/foo/foo.md``, ``milestones/foo.md``), layout FQNs
+            (``initiatives/foo``), and graph FQNs (``milestone/foo``).
 
     Returns:
         Entity kind string and resolved filesystem path.
@@ -452,15 +433,6 @@ def resolve_entity_path(root: Path, ref: str) -> tuple[str, Path]:
     """
     parts, root_resolved = _layout_parts_from_ref(root, ref)
     top = parts[0]
-    if top == GOALS_DIR:
-        return _resolve_markdown_entity_path(
-            root=root,
-            root_resolved=root_resolved,
-            ref=ref,
-            kind="goal",
-            layout_dir=GOALS_DIR,
-            parts=parts,
-        )
     if top == MILESTONES_DIR:
         return _resolve_markdown_entity_path(
             root=root,
@@ -525,7 +497,6 @@ def find_entity(root: Path, name: str) -> tuple[str, Path]:
         ("archived-initiative", archived_initiative_path(root, name)),
         ("project", project_dir(root, name)),
         ("milestone", milestone_path(root, name)),
-        ("goal", goal_path(root, name)),
     ]
     found = [(kind, path) for kind, path in candidates if path.exists()]
     if not found:
@@ -543,7 +514,7 @@ def find_entity_by_kind(root: Path, kind: str, name: str) -> tuple[str, Path]:
 
     Args:
         root: Roadmap root directory.
-        kind: Entity kind (``initiative``, ``project``, ``milestone``, ``goal``).
+        kind: Entity kind (``initiative``, ``project``, or ``milestone``).
         name: Natural entity name (kebab-case).
 
     Returns:
@@ -575,10 +546,7 @@ def find_entity_by_kind(root: Path, kind: str, name: str) -> tuple[str, Path]:
             return "milestone", path
         msg = f"no milestone named {name!r} in roadmap at {root}"
         raise BellmanLayoutError(msg)
-    path = goal_path(root, name)
-    if path.is_file():
-        return "goal", path
-    msg = f"no goal named {name!r} in roadmap at {root}"
+    msg = f"unknown entity kind {kind!r}"
     raise BellmanLayoutError(msg)
 
 
@@ -667,7 +635,8 @@ def _destination_exists(root: Path, kind: str, name: str) -> bool:
         return initiative_path(root, name).exists()
     if kind == "milestone":
         return milestone_path(root, name).exists()
-    return goal_path(root, name).exists()
+    msg = f"unknown entity kind {kind!r}"
+    raise BellmanLayoutError(msg)
 
 
 def _rewrite_predecessor_ref(predecessor: str, old_name: str, new_name: str) -> str:
@@ -763,17 +732,6 @@ def _rewrite_dependency_refs(root: Path, *, old_name: str, new_name: str) -> Non
                 wp_path.write_text("".join(lines), encoding="utf-8")
 
 
-def _update_goal_heading(path: Path, new_name: str) -> None:
-    title = new_name.replace("-", " ").title()
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines(keepends=True)
-    for index, line in enumerate(lines):
-        if line.startswith("# "):
-            lines[index] = f"# {title}\n"
-            break
-    path.write_text("".join(lines), encoding="utf-8")
-
-
 def _move_markdown_entity(path: Path, new_path: Path) -> None:
     if new_path.exists():
         msg = f"entity already exists: {new_path}"
@@ -802,12 +760,12 @@ def rename_entity(
     *,
     kind: str | None = None,
 ) -> RenamedEntity:
-    """Rename an initiative, project, milestone, or goal.
+    """Rename an initiative, project, or milestone.
 
     Args:
         root: Roadmap root directory.
         old_ref: Natural name, layout FQN, or layout-relative path
-            (e.g. ``goals/foo.md``, ``projects/foo``).
+            (e.g. ``milestones/foo.md``, ``projects/foo``).
         raw_new_name: New natural name (kebab-case).
         kind: When set, resolve ``old_ref`` as that entity kind only.
 
@@ -844,9 +802,8 @@ def rename_entity(
         new_path = milestone_path(root, new_name)
         _move_markdown_entity(path, new_path)
     else:
-        new_path = goal_path(root, new_name)
-        _move_markdown_entity(path, new_path)
-        _update_goal_heading(new_path, new_name)
+        msg = f"cannot rename {resolved_kind}"
+        raise BellmanLayoutError(msg)
 
     _rewrite_dependency_refs(root, old_name=old_name, new_name=new_name)
     return RenamedEntity(
@@ -858,12 +815,12 @@ def rename_entity(
 
 
 def delete_entity(root: Path, ref: str, *, force: bool = False) -> DeletedEntity:
-    """Delete an initiative, project, milestone, or goal.
+    """Delete an initiative, project, or milestone.
 
     Args:
         root: Roadmap root directory.
         ref: Natural name, layout FQN, or layout-relative path
-            (e.g. ``goals/foo.md``, ``projects/foo``).
+            (e.g. ``milestones/foo.md``, ``projects/foo``).
         force: Reserved for future dependency checks.
 
     Returns:

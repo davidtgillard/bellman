@@ -22,10 +22,10 @@ def _write_fits_marker(root: Path) -> None:
 
 def test_validate_reports_all_load_errors(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    goals = tmp_path / "goals"
-    goals.mkdir(parents=True)
-    (goals / "bad-a.md").write_text("no header\n", encoding="utf-8")
-    (goals / "bad-b.md").write_text("also no header\n", encoding="utf-8")
+    milestones = tmp_path / "milestones"
+    milestones.mkdir(parents=True)
+    (milestones / "bad-a.md").write_text("no header\n", encoding="utf-8")
+    (milestones / "bad-b.md").write_text("also no header\n", encoding="utf-8")
     result = runner.invoke(app, ["validate", "--no-registry", str(tmp_path)])
     assert result.exit_code == 1
     assert "bad-a.md" in result.output
@@ -34,13 +34,14 @@ def test_validate_reports_all_load_errors(tmp_path: Path) -> None:
 
 def test_validate_reports_all_validation_errors(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    goals = tmp_path / "goals"
-    goals.mkdir(parents=True)
-    (goals / "bad-one.md").write_text("# Wrong One\n\nContent.\n", encoding="utf-8")
-    (goals / "bad-two.md").write_text("# Wrong Two\n\nContent.\n", encoding="utf-8")
+    milestones = tmp_path / "milestones"
+    milestones.mkdir(parents=True)
+    bad = "# Bad\n\n## Date\n\nTBD\n\n## Description\n\nContent.\n"
+    (milestones / "bad-one.md").write_text(bad, encoding="utf-8")
+    (milestones / "bad-two.md").write_text(bad, encoding="utf-8")
     result = runner.invoke(app, ["validate", "--no-registry", str(tmp_path)])
     assert result.exit_code == 1
-    assert result.output.count("does not match name") == 2
+    assert result.output.count("YYYY-MM-DD") == 2
 
 
 def test_validate_does_not_sync(tmp_path: Path) -> None:
@@ -67,7 +68,7 @@ def test_validate_no_registry_skips_registry_check(tmp_path: Path) -> None:
 def test_validate_reports_registry_deltas(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     delta = RegistryDelta(
-        missing_nodes=("goal manual-goal",),
+        missing_nodes=("milestone manual-milestone",),
         extra_nodes=(),
         missing_links=(),
         extra_links=(),
@@ -78,7 +79,7 @@ def test_validate_reports_registry_deltas(tmp_path: Path) -> None:
     ):
         result = runner.invoke(app, ["validate", str(tmp_path)])
     assert result.exit_code == 0
-    assert "registry delta: missing node goal manual-goal" in result.output
+    assert "registry delta: missing node milestone manual-milestone" in result.output
     assert "bellman sync" in result.output
 
 
@@ -102,8 +103,8 @@ def test_validate_registry_matches(tmp_path: Path) -> None:
 def test_validate_emits_all_delta_message_kinds(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
     delta = RegistryDelta(
-        missing_nodes=("goal missing-g",),
-        extra_nodes=("goal extra-g",),
+        missing_nodes=("milestone missing-g",),
+        extra_nodes=("milestone extra-g",),
         missing_links=("parent_of a -> b",),
         extra_links=("depends_on x -> y",),
         needs_id_migration=True,
@@ -114,8 +115,8 @@ def test_validate_emits_all_delta_message_kinds(tmp_path: Path) -> None:
     ):
         result = runner.invoke(app, ["validate", str(tmp_path)])
     assert result.exit_code == 0
-    assert "missing node goal missing-g" in result.output
-    assert "extra node goal extra-g" in result.output
+    assert "missing node milestone missing-g" in result.output
+    assert "extra node milestone extra-g" in result.output
     assert "missing link parent_of a -> b" in result.output
     assert "extra link depends_on x -> y" in result.output
     assert "legacy flat node IDs" in result.output
@@ -194,9 +195,12 @@ def test_validate_warnings_only_path(tmp_path: Path) -> None:
 
 def test_sync_requires_markdown_validation_pass(tmp_path: Path) -> None:
     _write_fits_marker(tmp_path)
-    goals = tmp_path / "goals"
-    goals.mkdir(parents=True)
-    (goals / "bad-goal.md").write_text("# Wrong Title\n\nContent.\n", encoding="utf-8")
+    milestones = tmp_path / "milestones"
+    milestones.mkdir(parents=True)
+    (milestones / "bad-milestone.md").write_text(
+        "# Bad\n\n## Date\n\nTBD\n\n## Description\n\nContent.\n",
+        encoding="utf-8",
+    )
     with patch("bellman.cli.sync_roadmap") as sync_mock:
         result = runner.invoke(app, ["sync", str(tmp_path)])
     sync_mock.assert_not_called()

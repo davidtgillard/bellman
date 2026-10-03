@@ -136,7 +136,7 @@ def test_parse_numeric_tombstone_and_skips(tmp_path: Path) -> None:
             "kind": "fits-registry",
             "node_types": [
                 {
-                    "type": "goal",
+                    "type": "milestone",
                     "tombstones": [
                         {"n": 7, "guid": "g1"},
                         "skip-me",
@@ -171,7 +171,7 @@ def test_parse_numeric_tombstone_and_skips(tmp_path: Path) -> None:
                 {
                     "guid": "i1",
                     "name": "live",
-                    "type": "goal",
+                    "type": "milestone",
                     "kind": "node",
                     "scope": "nested",
                     "parent_guid": "p1",

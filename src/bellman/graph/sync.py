@@ -20,7 +20,6 @@ from bellman.graph.desired import (
     desired_node_ids,
     entity_node_id,
     flatten_wps,
-    goal_node_id,
     local_name_from_node_id,
     milestone_node_id,
     resolve_entity_ref_from_layout,
@@ -50,8 +49,7 @@ from bellman.graph.schema_migrate import (
     migrate_registry_schema,
     remove_obsolete_link_types,
 )
-from bellman.model import Goal, Initiative, Milestone, Project, Roadmap
-from bellman.parse.goal import parse_goal
+from bellman.model import Initiative, Milestone, Project, Roadmap
 from bellman.parse.milestone import parse_milestone
 from bellman.parse.work_scope import parse_work_scope
 from bellman.roadmap import load
@@ -80,7 +78,7 @@ def _container_logical_name(type_name: str, logical_name: str) -> str | None:
 
 
 _WORK_SCOPE_TYPES = frozenset({"initiative", "project"})
-_PROJECT_ONLY_LINK_TYPES = frozenset({"supports", "targets"})
+_PROJECT_ONLY_LINK_TYPES = frozenset({"targets"})
 
 
 def _prepare_registry_files(root: Path) -> Result[None, FitsError]:
@@ -166,10 +164,6 @@ def _logical_wp_name(project_name: str, slug: str) -> str:
 
 def _logical_milestone_name(name: str) -> str:
     return milestone_node_id(name)
-
-
-def _logical_goal_name(name: str) -> str:
-    return goal_node_id(name)
 
 
 def _reload_graph(repo: Repo) -> Result[Graph, FitsError]:
@@ -320,7 +314,6 @@ _ENTITY_KIND_TO_TYPE = {
     "archived-initiative": "initiative",
     "project": "project",
     "milestone": "milestone",
-    "goal": "goal",
 }
 
 
@@ -440,7 +433,7 @@ def _drop_incident_links(
     """Remove incident links of ``link_types`` so libfits can retype ``guid``.
 
     ``precedes_*_scope`` links are registered as ``project``→``project``.
-    ``supports`` / ``targets`` are project-typed. Sync recreates markdown
+    ``targets`` is project-typed. Sync recreates markdown
     scope edges afterward.
 
     Args:
@@ -606,7 +599,7 @@ def prune_deleted_entity(
     Args:
         root: Roadmap root directory.
         kind: Entity kind from :func:`bellman.layout.delete_entity`
-            (e.g. ``initiative``, ``project``, ``goal``).
+            (e.g. ``initiative``, ``project``, ``milestone``).
         name: Natural entity name (kebab-case).
 
     Returns:
@@ -675,14 +668,14 @@ def prune_deleted_entity(
     return Ok(None)
 
 
-_CREATE_ENTITY_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
+_CREATE_ENTITY_KINDS = frozenset({"initiative", "project", "milestone"})
 
 
 def _parse_created_entity(
     root: Path,
     kind: str,
     name: str,
-) -> Result[Initiative | Project | Milestone | Goal, FitsError]:
+) -> Result[Initiative | Project | Milestone, FitsError]:
     """Parse a single layout entity file for targeted graph sync."""
     try:
         if kind == "initiative":
@@ -702,8 +695,6 @@ def _parse_created_entity(
             return Ok(project)
         if kind == "milestone":
             return Ok(parse_milestone(layout.milestone_path(root, name)))
-        if kind == "goal":
-            return Ok(parse_goal(layout.goal_path(root, name)))
         msg = f"unknown entity kind {kind!r}"
         raise ValueError(msg)
     except (ValueError, OSError) as exc:
@@ -842,7 +833,7 @@ def sync_created_entity(
 
     Args:
         root: Roadmap root directory.
-        kind: Entity kind (``initiative``, ``project``, ``milestone``, ``goal``).
+        kind: Entity kind (``initiative``, ``project``, or ``milestone``).
         name: Natural entity name (kebab-case).
 
     Returns:
@@ -934,19 +925,6 @@ def sync_created_entity(
                 type_name="milestone",
                 logical_name=_logical_milestone_name(milestone.name),
                 title=milestone.title,
-            )
-            if isinstance(ensured, Err):
-                return ensured
-        else:
-            goal = entity
-            assert isinstance(goal, Goal)
-            ensured = _ensure_node(
-                repo,
-                root,
-                graph,
-                type_name="goal",
-                logical_name=_logical_goal_name(goal.name),
-                title=goal.title,
             )
             if isinstance(ensured, Err):
                 return ensured
@@ -1092,7 +1070,6 @@ def _ensure_link(
         name=None if nested else link_name,
     )
     if isinstance(result, Ok) and result.ok_value.name in {
-        "goal",
         "initiative",
         "project",
         "milestone",
@@ -1380,18 +1357,6 @@ def sync_roadmap(
                 type_name="milestone",
                 logical_name=_logical_milestone_name(milestone.name),
                 title=milestone.title,
-            )
-            if isinstance(res, Err):
-                return res
-
-        for goal in roadmap.goals:
-            res = _ensure_node(
-                repo,
-                root,
-                graph,
-                type_name="goal",
-                logical_name=_logical_goal_name(goal.name),
-                title=goal.title,
             )
             if isinstance(res, Err):
                 return res

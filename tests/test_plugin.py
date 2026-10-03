@@ -70,7 +70,7 @@ def _write_registry(root: Path) -> None:
 
 
 def test_plugin_list_and_run(tmp_path: Path) -> None:
-    layout_dirs = ["initiatives", "projects", "milestones", "goals"]
+    layout_dirs = ["initiatives", "projects", "milestones"]
     for name in layout_dirs:
         (tmp_path / name).mkdir()
     _write_registry(tmp_path)
@@ -152,7 +152,7 @@ def test_plugin_usage_without_args(tmp_path: Path) -> None:
 def test_plugin_list_empty_dir(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
     (tmp_path / "plugin").mkdir()
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     result = runner.invoke(app, ["plugin", "--path", str(tmp_path), "list"])
     assert result.exit_code == 0
@@ -161,7 +161,7 @@ def test_plugin_list_empty_dir(tmp_path: Path) -> None:
 
 def test_plugin_list_missing_dir(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     result = runner.invoke(app, ["plugin", "--path", str(tmp_path), "list"])
     assert result.exit_code == 0
@@ -169,7 +169,7 @@ def test_plugin_list_missing_dir(tmp_path: Path) -> None:
 
 
 def test_plugin_list_load_error(tmp_path: Path) -> None:
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     _write_registry(tmp_path)
     plugin_dir = tmp_path / "plugin" / "broken"
@@ -185,7 +185,7 @@ def test_plugin_list_load_error(tmp_path: Path) -> None:
 def test_plugin_help(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     from bellman.plugin.cli import _plugin_help
 
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     _write_registry(tmp_path)
     _write_echo_plugin(tmp_path)
@@ -213,7 +213,7 @@ def test_plugin_dispatch_help_flag(
     from bellman.plugin.cli import _dispatch_plugin
     from bellman.plugin.textio import TextIO
 
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     _write_registry(tmp_path)
     _write_echo_plugin(tmp_path)
@@ -234,7 +234,7 @@ def test_plugin_dispatch_bad_args(tmp_path: Path) -> None:
     from bellman.plugin.cli import _dispatch_plugin
     from bellman.plugin.textio import TextIO
 
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     _write_registry(tmp_path)
     _write_echo_plugin(tmp_path)
@@ -249,7 +249,7 @@ def test_plugin_dispatch_bad_args(tmp_path: Path) -> None:
 
 def test_plugin_dispatch_no_plugin_dir(tmp_path: Path) -> None:
     (tmp_path / ".fits").mkdir()
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     result = runner.invoke(
         app,
@@ -453,7 +453,7 @@ def test_bellman_context_roadmap_and_history(tmp_path: Path) -> None:
     from bellman.graph.history import BellmanHistoryError, GraphHistory
     from bellman.plugin.context import BellmanContext
 
-    for name in ("initiatives", "projects", "milestones", "goals"):
+    for name in ("initiatives", "projects", "milestones"):
         (tmp_path / name).mkdir()
     _write_registry(tmp_path)
     ctx = BellmanContext(root=tmp_path, libfits_available=False)

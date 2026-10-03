@@ -43,23 +43,6 @@ def _add_initiative_dependency(root: Path, *, dep: str, target: str) -> None:
 
 
 @pytest.mark.integration
-def test_sync_renamed_goal(tmp_path: Path) -> None:
-    if not libfits_available():
-        pytest.skip("libfits not available")
-    layout.ensure_roadmap_dirs(tmp_path)
-    _bootstrap_pyfits(tmp_path)
-    layout.create_goal(tmp_path, "old-goal")
-    assert isinstance(sync_created_entity(tmp_path, "goal", "old-goal"), Ok)
-    assert _has_live_logical(tmp_path, entity_node_id("goal", "old-goal"))
-
-    layout.rename_entity(tmp_path, "old-goal", "new-goal", kind="goal")
-    result = sync_renamed_entity(tmp_path, "goal", "old-goal", "new-goal")
-    assert isinstance(result, Ok)
-    assert _has_live_logical(tmp_path, entity_node_id("goal", "new-goal"))
-    assert not _has_live_logical(tmp_path, entity_node_id("goal", "old-goal"))
-
-
-@pytest.mark.integration
 @pytest.mark.parametrize(
     ("kind", "create_fn", "old_name", "new_name"),
     [
@@ -129,18 +112,6 @@ def test_sync_created_milestone(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_sync_created_goal(tmp_path: Path) -> None:
-    if not libfits_available():
-        pytest.skip("libfits not available")
-    layout.ensure_roadmap_dirs(tmp_path)
-    _bootstrap_pyfits(tmp_path)
-    layout.create_goal(tmp_path, "reduce-churn")
-    result = sync_created_entity(tmp_path, "goal", "reduce-churn")
-    assert isinstance(result, Ok)
-    assert _has_live_logical(tmp_path, entity_node_id("goal", "reduce-churn"))
-
-
-@pytest.mark.integration
 def test_sync_created_initiative_with_dependency(tmp_path: Path) -> None:
     if not libfits_available():
         pytest.skip("libfits not available")
@@ -174,9 +145,13 @@ def test_sync_renamed_after_full_roadmap(tmp_path: Path) -> None:
         pytest.skip("libfits not available")
     layout.ensure_roadmap_dirs(tmp_path)
     _bootstrap_pyfits(tmp_path)
-    layout.create_goal(tmp_path, "roadmap-goal")
+    layout.create_milestone(tmp_path, "roadmap-milestone")
     assert isinstance(sync_roadmap(tmp_path), Ok)
-    layout.rename_entity(tmp_path, "roadmap-goal", "renamed-goal", kind="goal")
-    result = sync_renamed_entity(tmp_path, "goal", "roadmap-goal", "renamed-goal")
+    layout.rename_entity(
+        tmp_path, "roadmap-milestone", "renamed-milestone", kind="milestone"
+    )
+    result = sync_renamed_entity(
+        tmp_path, "milestone", "roadmap-milestone", "renamed-milestone"
+    )
     assert isinstance(result, Ok)
-    assert _has_live_logical(tmp_path, entity_node_id("goal", "renamed-goal"))
+    assert _has_live_logical(tmp_path, entity_node_id("milestone", "renamed-milestone"))

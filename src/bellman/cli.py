@@ -162,7 +162,7 @@ def _run_rename(
         if isinstance(exc, BellmanLayoutError) and message.startswith("ambiguous name"):
             message = (
                 f"{message}; use: bellman rename <kind> <old> <new> "
-                "(kind is initiative, project, milestone, or goal)"
+                "(kind is initiative, project, or milestone)"
             )
         typer.echo(message, err=True)
         raise typer.Exit(code=1) from exc
@@ -340,30 +340,13 @@ def create_milestone(
     _apply_created_entity_sync(root, "milestone", created.stem)
 
 
-@create_app.command("goal")
-def create_goal(
-    name: Annotated[str, typer.Argument(help="Goal name (kebab-case)")],
-    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
-) -> None:
-    """Create a goal markdown file."""
-    root = _root(path)
-    layout.ensure_roadmap_dirs(root)
-    try:
-        created = layout.create_goal(root, name)
-        typer.echo(f"Created {created}")
-    except (BellmanLayoutError, ValueError) as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
-    _apply_created_entity_sync(root, "goal", created.stem)
-
-
 @app.command()
 def delete(
     name: Annotated[str, typer.Argument(help=_ENTITY_ID_HELP)],
     path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
     force: Annotated[bool, typer.Option("--force", help="Force delete")] = False,
 ) -> None:
-    """Delete an initiative, project, milestone, or goal."""
+    """Delete an initiative, project, or milestone."""
     root = _root(path)
     try:
         deleted = layout.delete_entity(root, name, force=force)
@@ -413,9 +396,6 @@ def demote(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     _apply_graph_sync(root)
-
-
-_RENAME_KINDS = frozenset({"initiative", "project", "milestone", "goal"})
 
 
 def _rename_positionals(args: list[str]) -> list[str]:
@@ -498,24 +478,6 @@ def rename_milestone(
 ) -> None:
     """Rename a milestone."""
     _run_rename(old_name, new_name, path=path, kind="milestone")
-
-
-@rename_app.command("goal")
-def rename_goal(
-    old_name: Annotated[
-        str,
-        typer.Argument(
-            help=(
-                "Goal name, FQN, or path (e.g. reduce-churn, goals/reduce-churn, "
-                "goals/reduce-churn.md)"
-            )
-        ),
-    ],
-    new_name: Annotated[str, typer.Argument(help="New goal name (kebab-case)")],
-    path: Annotated[Path | None, typer.Option("--path", help="Roadmap root")] = None,
-) -> None:
-    """Rename a goal."""
-    _run_rename(old_name, new_name, path=path, kind="goal")
 
 
 attribute_app = typer.Typer(

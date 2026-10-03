@@ -582,15 +582,3 @@ def test_subsections_utility() -> None:
     sibling = Section(level=2, title="Sibling", body="", line=3)
     assert subsections(parent, [parent, child, sibling]) == [child]
     assert subsections(parent, [child]) == []
-
-
-def test_goal_with_h2_section(tmp_path: Path) -> None:
-    from bellman.parse.goal import parse_goal
-
-    path = tmp_path / "reduce-churn.md"
-    path.write_text(
-        "# Reduce Churn\n\n## Notes\n\nExtra section body.\n",
-        encoding="utf-8",
-    )
-    goal = parse_goal(path)
-    assert "Extra section body" in goal.description
