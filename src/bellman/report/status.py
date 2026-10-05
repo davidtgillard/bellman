@@ -118,8 +118,8 @@ def compute_roadmap_status(
     Args:
         root: Roadmap root directory.
         registry: When True, compare markdown to the pyfits registry.
-        require_validators: When True, custom validators that cannot run in
-            this build are reported as errors instead of warnings.
+        require_validators: When True, custom validators that cannot be loaded
+            in a frozen build are reported as errors instead of warnings.
 
     Returns:
         ``Ok(RoadmapStatus)`` with entity inventory and optional registry delta.

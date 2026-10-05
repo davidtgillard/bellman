@@ -98,7 +98,7 @@ bellman demote billing-redesign    # park the project folder; restore the initia
 bellman demote projects/billing-redesign/billing-redesign.md
 bellman validate
 bellman validate --no-registry
-bellman validate --require-validators   # fail instead of skipping Python validators
+bellman validate --require-validators   # fail when a frozen validator cannot load
 bellman sync --require-validators
 bellman status --require-validators
 bellman attribute rename program platform-v2 platform-v3
@@ -278,7 +278,7 @@ VALIDATOR = BellmanValidator(
 )
 ```
 
-Validators run after the built-in checks, and a validator is skipped when the built-in checks found errors for any attribute it lists (so it only sees well-formed data). An exception in a validator is reported as a validation error. Like plugins, validators need a **Python install** of bellman; the standalone binary skips them with a warning, and `--require-validators` on `bellman validate`, `bellman sync` and `bellman status` turns that warning into an error (use it in CI that runs the binary). `status` still exits 0; it only reports the skip as an error in its output. A validator held back because the built-in checks found errors for an attribute it lists is reported as a warning naming those attributes.
+Validators run after the built-in checks, and a validator is skipped when the built-in checks found errors for any attribute it lists (so it only sees well-formed data). An exception in a validator is reported as a validation error. Keep validators to the Python standard library and `bellman` so the standalone binary can import them. A load failure in that binary (for example a third-party import) is a warning for that validator only; the others still run. `--require-validators` on `bellman validate`, `bellman sync` and `bellman status` turns that warning into an error (use it in CI that runs the binary). `status` still exits 0; it only reports the skip as an error in its output. A source install reports load failures as errors. A validator held back because the built-in checks found errors for an attribute it lists is reported as a warning naming those attributes.
 
 ### Renaming a value
 

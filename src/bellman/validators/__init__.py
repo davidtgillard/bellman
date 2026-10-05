@@ -21,8 +21,9 @@ A validator lives in ``validator/{name}/`` at the roadmap root and exports a
         run=check,
     )
 
-Validators need a Python install of bellman; the standalone binary reports
-them as skipped.
+The standalone binary runs validators that import only the standard library
+and ``bellman``. A load failure there is a warning (an error with
+``--require-validators``); a source install reports load failures as errors.
 """
 
 from bellman.validators.discover import VALIDATOR_DIR, discover_validators

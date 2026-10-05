@@ -837,8 +837,8 @@ def status(
         typer.Option(
             "--require-validators",
             help=(
-                "Report custom validators that cannot run (the standalone "
-                "binary skips them) as errors instead of warnings"
+                "Report custom validators that cannot be loaded in the "
+                "standalone binary as errors instead of warnings"
             ),
         ),
     ] = False,
@@ -872,8 +872,7 @@ def validate(
         typer.Option(
             "--require-validators",
             help=(
-                "Fail when custom validators under validator/ cannot run "
-                "(the standalone binary skips them)"
+                "Fail when a custom validator cannot be loaded in the standalone binary"
             ),
         ),
     ] = False,
@@ -922,8 +921,7 @@ def sync(
         typer.Option(
             "--require-validators",
             help=(
-                "Fail when custom validators under validator/ cannot run "
-                "(the standalone binary skips them)"
+                "Fail when a custom validator cannot be loaded in the standalone binary"
             ),
         ),
     ] = False,

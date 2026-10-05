@@ -15,10 +15,14 @@ from bellman.validators.protocol import ValidationContext
 
 __all__ = ["validate_roadmap_full"]
 
-_FROZEN_HINT = (
-    "the standalone binary cannot load repo Python; "
-    "run bellman from a Python install to enable it"
-)
+_FROZEN_LOAD_HINT = "keep validators to the Python standard library and bellman"
+
+
+def _frozen_load_skip(label: str, detail: str) -> str:
+    return (
+        f"{label} skipped: could not load in the standalone binary "
+        f"({detail}); {_FROZEN_LOAD_HINT}"
+    )
 
 
 def validate_roadmap_full(
@@ -31,19 +35,22 @@ def validate_roadmap_full(
 
     Validators run after the built-in checks, and only when those produced no
     error for any attribute the validator lists (a validator held back this way
-    is reported as a warning naming those attributes). In a frozen (standalone
-    binary) build validators are not imported; each one is reported as skipped.
+    is reported as a warning naming those attributes). Frozen (standalone
+    binary) builds try the same import. A load failure there skips that one
+    validator (a warning, or an error when ``require_validators`` is set) so a
+    missing third-party module does not hide the rest. A source install still
+    reports load failures as errors.
 
     Args:
         root: Roadmap root directory.
         roadmap: Loaded roadmap.
-        require_validators: When true, a validator skipped because the build is
-            frozen is an error instead of a warning.
+        require_validators: When true, a validator that cannot be loaded in a
+            frozen build is an error instead of a warning.
 
     Returns:
-        Built-in findings followed by validator findings. Load failures and
-        exceptions raised inside a validator are reported as errors naming the
-        validator.
+        Built-in findings followed by validator findings. Load failures in a
+        source install, and exceptions raised inside a validator, are reported
+        as errors naming the validator.
     """
     base = validate_roadmap(roadmap)
     specs = discover_validators(root)
@@ -52,18 +59,6 @@ def validate_roadmap_full(
 
     errors: list[BellmanError] = []
     warnings: list[BellmanWarning] = []
-
-    if is_frozen():
-        for spec in specs:
-            message = f"validator {spec.name!r} skipped: {_FROZEN_HINT}"
-            if require_validators:
-                errors.append(BellmanError(str(spec.path), message))
-            else:
-                warnings.append(BellmanWarning(str(spec.path), message))
-        return ValidationResult(
-            errors=base.errors + tuple(errors),
-            warnings=base.warnings + tuple(warnings),
-        )
 
     failed = check_attributes_detailed(roadmap).failed_attributes
     context = ValidationContext(roadmap=roadmap, root=root)
@@ -74,9 +69,17 @@ def validate_roadmap_full(
         try:
             validator = load_validator(spec)
         except ValidatorLoadError as exc:
-            errors.append(
-                BellmanError(exc.path or str(spec.path), f"{label}: {exc.message}")
-            )
+            path = exc.path or str(spec.path)
+            if is_frozen():
+                message = _frozen_load_skip(label, exc.message)
+                finding_error = BellmanError(path, message)
+                finding_warning = BellmanWarning(path, message)
+                if require_validators:
+                    errors.append(finding_error)
+                else:
+                    warnings.append(finding_warning)
+            else:
+                errors.append(BellmanError(path, f"{label}: {exc.message}"))
             continue
 
         unknown = [

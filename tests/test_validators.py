@@ -37,6 +37,10 @@ from bellman.validators import (
 runner = CliRunner()
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "roadmap"
 
+BAD_IMPORT = """
+import not_a_real_bellman_module
+"""
+
 NO_P0 = """
 from bellman.errors import BellmanError
 from bellman.validators import BellmanValidator
@@ -343,21 +347,30 @@ def frozen(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("bellman.validators.runner.is_frozen", lambda: True)
 
 
+def test_frozen_build_runs_simple_validators(tmp_path: Path, frozen: None) -> None:
+    root = _setup(tmp_path)
+    _write_validator(root, "no-p0", NO_P0)
+    write_initiative(root, "alpha", ["priority: P0"])
+    result = _full(root)
+    assert [e.message for e in result.errors] == ["no P0 initiatives"]
+    assert result.warnings == ()
+
+
 def test_frozen_build_skips_validators_with_a_warning(
     tmp_path: Path,
     frozen: None,
 ) -> None:
     root = _setup(tmp_path)
+    _write_validator(root, "bad-import", BAD_IMPORT)
     _write_validator(root, "no-p0", NO_P0)
-    _write_validator(root, "second", NO_P0.replace("no-p0", "second"))
     write_initiative(root, "alpha", ["priority: P0"])
     result = _full(root)
-    assert result.errors == ()
+    assert [e.message for e in result.errors] == ["no P0 initiatives"]
     assert [w.message.split(":")[0] for w in result.warnings] == [
-        "validator 'no-p0' skipped",
-        "validator 'second' skipped",
+        "validator 'bad-import' skipped",
     ]
     assert "standalone binary" in result.warnings[0].message
+    assert "not_a_real_bellman_module" in result.warnings[0].message
 
 
 def test_frozen_build_require_validators_is_an_error(
@@ -365,12 +378,12 @@ def test_frozen_build_require_validators_is_an_error(
     frozen: None,
 ) -> None:
     root = _setup(tmp_path)
-    _write_validator(root, "no-p0", NO_P0)
+    _write_validator(root, "bad-import", BAD_IMPORT)
     write_initiative(root, "alpha", ["priority: P1"])
     result = _full(root, require_validators=True)
     assert result.warnings == ()
     assert [e.message.split(":")[0] for e in result.errors] == [
-        "validator 'no-p0' skipped"
+        "validator 'bad-import' skipped"
     ]
 
 
@@ -379,7 +392,7 @@ def test_cli_validate_warns_when_validators_are_skipped(
     frozen: None,
 ) -> None:
     root = _setup(tmp_path)
-    _write_validator(root, "no-p0", NO_P0)
+    _write_validator(root, "bad-import", BAD_IMPORT)
     write_initiative(root, "alpha", ["priority: P1"])
     ok = runner.invoke(app, ["validate", str(root), "--no-registry"])
     assert ok.exit_code == 0, ok.output
@@ -396,7 +409,7 @@ def test_cli_sync_require_validators(
     frozen: None,
 ) -> None:
     root = _setup(tmp_path)
-    _write_validator(root, "no-p0", NO_P0)
+    _write_validator(root, "bad-import", BAD_IMPORT)
     write_initiative(root, "alpha", ["priority: P1"])
     strict = runner.invoke(app, ["sync", str(root), "--require-validators"])
     assert strict.exit_code == 1
@@ -440,16 +453,16 @@ def test_status_require_validators_turns_skip_into_error(
     frozen: None,
 ) -> None:
     root = _setup(tmp_path)
-    _write_validator(root, "no-p0", NO_P0)
+    _write_validator(root, "bad-import", BAD_IMPORT)
     write_initiative(root, "alpha", ["priority: P1"])
     issues = _status_issues(root, require=True)
-    assert any("validator 'no-p0' skipped" in i for i in issues)
+    assert any("validator 'bad-import' skipped" in i for i in issues)
     cli = runner.invoke(
         app, ["status", str(root), "--no-registry", "--require-validators"]
     )
     # status reports; it does not change its exit code
     assert cli.exit_code == 0, cli.output
-    assert "validator 'no-p0' skipped" in cli.output
+    assert "validator 'bad-import' skipped" in cli.output
 
 
 def test_status_without_flag_still_lists_the_skip(
@@ -457,10 +470,11 @@ def test_status_without_flag_still_lists_the_skip(
     frozen: None,
 ) -> None:
     root = _setup(tmp_path)
-    _write_validator(root, "no-p0", NO_P0)
+    _write_validator(root, "bad-import", BAD_IMPORT)
     write_initiative(root, "alpha", ["priority: P1"])
     assert any(
-        "validator 'no-p0' skipped" in i for i in _status_issues(root, require=False)
+        "validator 'bad-import' skipped" in i
+        for i in _status_issues(root, require=False)
     )
 
 
